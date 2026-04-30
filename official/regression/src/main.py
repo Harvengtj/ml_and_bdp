@@ -22,11 +22,19 @@ num_epochs = 5
 device = 'cuda:0'
 num_classes = 10
 
+# Load dataset 
+#data = sio.loadmat('official/regression/dataset/ground_truth/test/2018.mat') 
+# Voir les variables disponibles (clés du dictionnaire) 
+#print(data.keys()) 
+# Accéder à une variable spécifique (ex: 'data') 
+#data = data['groundTruth']
+#print(data)
+
+
 transform = T.Compose([
     T.Resize((256, 256)),
     T.ToTensor()
 ])
-
 
 trainset = BSDSDataset(
     r"C:\Users\justi\OneDrive\Documents\Q10\machine_learning_and_big_data_processing\project\official\regression\dataset\images\train",

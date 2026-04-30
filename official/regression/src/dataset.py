@@ -30,11 +30,9 @@ class BSDSDataset(Dataset):
         gt_path = os.path.join(self.gt_dir, self.gts[idx]) # ex: dataset\ground_truth\test\2018
         mat = sio.loadmat(gt_path)
         gt = mat['groundTruth']
-        # In the event that gt is a segmentation list --> we take the first one
-        if isinstance(gt, np.ndarray) and gt.dtype == 'O':
-            gt = gt[0][0][0][0].astype(np.int64)
-        else:
-            gt = np.squeeze(gt)
+        # Extraction
+        gt = gt[0][0]['Segmentation'][0][0]
+        gt = gt.astype(np.int64)
             
         # === Transforms ===
         if self.transform:
