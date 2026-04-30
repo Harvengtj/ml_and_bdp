@@ -161,13 +161,3 @@ class Discriminator(nn.Module):
         return last
 
 
-
-def create_discriminator(self):
-        kernels_dis = [
-            (64, 2, 0),
-            (128, 2, 0),
-            (256, 2, 0),
-            (512, 1, 0),
-        ]
-
-        return Discriminator('dis', kernels_dis, training=self.options.training)
