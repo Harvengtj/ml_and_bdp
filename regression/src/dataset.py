@@ -9,14 +9,14 @@ import scipy.io as sio
 #=== Dataset ===
 #=======================================================================================
 class BSDSDataset(Dataset):
-    def __init__(self, img_dir, gt_dir, transform=None, target_transform=None):
+    def __init__(self, img_dir, transform=None, target_transform=None):
         self.img_dir = img_dir # image directory
-        self.gt_dir = gt_dir # ground truth directory
+        #self.gt_dir = gt_dir # ground truth directory
         self.transform = transform
         self.target_transform = target_transform
         
         self.images = sorted(os.listdir(img_dir))
-        self.gts = sorted(os.listdir(gt_dir))
+        #self.gts = sorted(os.listdir(gt_dir))
         
     def __len__(self):
         return len(self.images)
@@ -27,22 +27,20 @@ class BSDSDataset(Dataset):
         image = Image.open(img_path).convert("RGB")
         
         # === Ground truth (.mat) ===
-        gt_path = os.path.join(self.gt_dir, self.gts[idx]) # ex: dataset\ground_truth\test\2018
-        mat = sio.loadmat(gt_path)
-        gt = mat['groundTruth']
-        # In the event that gt is a segmentation list --> we take the first one
-        if isinstance(gt, np.ndarray) and gt.dtype == 'O':
-            gt = gt[0][0][0][0].astype(np.int64)
-        else:
-            gt = np.squeeze(gt)
+        #gt_path = os.path.join(self.gt_dir, self.gts[idx]) # ex: dataset\ground_truth\test\2018
+        #mat = sio.loadmat(gt_path)
+        #gt = mat['groundTruth']
+        # Extraction
+        #gt = gt[0][0]['Segmentation'][0][0]
+        #gt = gt.astype(np.int64)
             
         # === Transforms ===
         if self.transform:
             image = self.transform(image)
             
-        gt = torch.tensor(gt, dtype=torch.long)
+        #gt = torch.tensor(gt, dtype=torch.long)
         
-        return image, gt
+        return image
     
     
             

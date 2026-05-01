@@ -17,7 +17,10 @@ class Generator(nn.Module):
     def __init__(self):
         super().__init__()
         
-        # Encoder layers: Conv2d, BN, leaky-ReLu
+        #-------------------------------------------------------------------------------------------------------------------
+        # Encoder layers: 1 - 2: Conv2d, no BN, leaky-ReLu
+        #                 2 - 9: Conv2d, BN, leaky-ReLu 
+        #
         # Size output: H_out = (H_in - K + 2P) / S + 1 
         #              W_out = (W_in - K + 2P) / S + 1
         self.conv1_2 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=3, stride=1, padding=1) # attention to size
@@ -29,7 +32,11 @@ class Generator(nn.Module):
         self.conv7_8 = nn.Conv2d(in_channels=512, out_channels=512, kernel_size=4, stride=2, padding=1)
         self.conv8_9 = nn.Conv2d(in_channels=512, out_channels=512, kernel_size=4, stride=2, padding=1)
         
-        # Decoder layer: ConvTranspose2d, BN, ReLu
+        #-------------------------------------------------------------------------------------------------------------------
+        # Decoder layer: 9 - 2: ConvTranspose2d, BN, ReLu, concatenation
+        #                2 - 1: ConvTranspose2d, no BN, ReLu
+        #                1 - 0: ConvTranspose2d, no BN, tanh
+        #
         # Size output: H_out = (H_in - 1) * S - 2 * P + K (+ output_padding)
         #              W_out = (W_in - 1) * S - 2 * P + K (+ output_padding)
         self.deconv9_8 = nn.ConvTranspose2d(in_channels=512, out_channels=512, kernel_size=4, stride=2, padding=1)
@@ -42,6 +49,7 @@ class Generator(nn.Module):
         self.deconv2_1 = nn.ConvTranspose2d(in_channels=128, out_channels=3, kernel_size=4, stride=2, padding=1)
         self.deconv1_0 = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=1) # 1x1 conv with tanh and stride 1
 
+        #-------------------------------------------------------------------------------------------------------------------
         # Batch norm 2D
         # no bn1_2
         self.bn2_3 = nn.BatchNorm2d(num_features=64)
@@ -60,11 +68,8 @@ class Generator(nn.Module):
         self.bn3_2 = nn.BatchNorm2d(num_features=64)
         # no bn2_1
         # no bn1_0
-        
+        #-------------------------------------------------------------------------------------------------------------------
    
-
-
-
     def forward(self, enc_x1):
         # --- Encoder ---
         # Layer 1-2: (1, 256, 256) --> (64, 256, 256)
@@ -122,42 +127,42 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self):
         super().__init__()
+        #-------------------------------------------------------------------------------------------------------------------
         
-        # Encoder layers: Conv2d, BN, leaky-ReLu
+        # Encoder layers: 1 - 2: Conv2d, no BN, leaky-ReLu
+        #                 1 - 5: Conv2d, BN, leaky-ReLu
+        #                 5 - 6: Conv2d, no BN, sigmoid
         # Size output: H_out = (H_in - K + 2P) / S + 1 
         #              W_out = (W_in - K + 2P) / S + 1
         self.conv1_2 = nn.Conv2d(in_channels=4, out_channels=64, kernel_size=3, stride=1, padding=1) # attention to size
-        self.conv3_4 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1)
-        self.conv4_5 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1)
-        self.conv5_6 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=2, padding=1)
-        self.last = nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=2, padding=1)
-  
-    
+        self.conv2_3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1)
+        self.conv3_4 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1)
+        self.conv4_5 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=2, padding=1)
+        self.conv5_6 = nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=2, padding=1)
 
+        #-------------------------------------------------------------------------------------------------------------------
         # Batch norm 2D
         # no bn1_2
-        self.bn3_4 = nn.BatchNorm2d(num_features=128)
-        self.bn4_5 = nn.BatchNorm2d(num_features=256)
-        self.bn5_6 = nn.BatchNorm2d(num_features=512)  
+        self.bn2_3 = nn.BatchNorm2d(num_features=128)
+        self.bn3_4 = nn.BatchNorm2d(num_features=256)
+        self.bn4_5 = nn.BatchNorm2d(num_features=512)  
+        # no bn5_6
         
+        #-------------------------------------------------------------------------------------------------------------------
         
-   
-
-
-
-    def forward(self, enc_x1):
+    def forward(self, dis_x1):
         # --- Encoder ---
         # Layer 1-2: (1, 256, 256) --> (64, 256, 256)
-        enc_x2 = F.leaky_relu(self.conv1_2(enc_x1), negative_slope=0.2) # no batch norm
-        # Layer 3-4: (64, 256, 256) --> (128, 128, 128)
-        enc_x4 = F.leaky_relu(self.bn3_4(self.conv3_4(enc_x2)), negative_slope=0.2)
-        # Layer 4-5: (128, 128, 128) --> (256, 64, 64)
-        enc_x5 = F.leaky_relu(self.bn4_5(self.conv4_5(enc_x4)), negative_slope=0.2)
-        # Layer 5-6: (256, 64, 64) --> (512, 32, 32)
-        enc_x6 = F.leaky_relu(self.bn5_6(self.conv5_6(enc_x5)), negative_slope=0.2)
+        dis_x2 = F.leaky_relu(self.conv1_2(dis_x1), negative_slope=0.2) # no batch norm
+        # Layer 2-3: (64, 256, 256) --> (128, 128, 128)
+        dis_x3 = F.leaky_relu(self.bn2_3(self.conv2_3(dis_x2)), negative_slope=0.2)
+        # Layer 3-4: (128, 128, 128) --> (256, 64, 64)
+        dis_x4 = F.leaky_relu(self.bn3_4(self.conv3_4(dis_x3)), negative_slope=0.2)
+        # Layer 4-5: (256, 64, 64) --> (512, 32, 32)
+        dis_x5 = F.leaky_relu(self.bn4_5(self.conv4_5(dis_x4)), negative_slope=0.2)
         # Last layer: (512, 32, 32) --> (1, 32, 32)
-        last = torch.sigmoid(self.last(enc_x6), negative_slope=0.2)
+        dis_x6 = torch.sigmoid(self.conv5_6(dis_x5), negative_slope=0.2)
         
-        return last
+        return dis_x6
 
 
