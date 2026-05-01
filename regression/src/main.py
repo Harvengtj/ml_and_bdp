@@ -13,7 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from PIL import Image
 
-from dataset import BSDSDataset
+from dataset import BSDSDataset, GrayscaleBSDSDataset
 
 
 # Parameters
@@ -28,14 +28,13 @@ transform = T.Compose([
     T.ToTensor()
 ])
 
-trainset = BSDSDataset(
+trainset = GrayscaleBSDSDataset(
     r"C:\Users\justi\OneDrive\Documents\Q10\machine_learning_and_big_data_processing\project\regression\dataset\images\train",
     transform=transform
 )
 
-print(trainset.images[0])
 
-valset = BSDSDataset(
+valset = GrayscaleBSDSDataset(
     r"C:\Users\justi\OneDrive\Documents\Q10\machine_learning_and_big_data_processing\project\regression\dataset\images\val",
     transform=transform
 )
@@ -63,8 +62,6 @@ def imshow(img):
 # Get some random training images
 dataiter = iter(trainloader)
 example_images = next(dataiter)
-
-print(example_images.shape)
 
 # Show images
 imshow(torchvision.utils.make_grid(example_images))
