@@ -1,0 +1,80 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build and package artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ML experiment outputs and generated artifacts
+checkpoints/
+checkpoint/
+models/
+weights/
+runs/
+wandb/
+mlruns/
+lightning_logs/
+tensorboard/
+outputs/
+output/
+results/
+logs/
+*.ckpt
+*.pt
+*.pth
+*.pkl
+*.pickle
+*.joblib
+*.onnx
+*.h5
+*.hdf5
+
+# Large local/generated numeric arrays
+*.npy
+*.npz
+
+# Local datasets and scratch space
+data/
+datasets/
+tmp/
+temp/
+scratch/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# OneDrive and Office temporary files
+~$*
+*.tmp
