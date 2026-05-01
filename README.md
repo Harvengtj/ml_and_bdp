@@ -55,6 +55,729 @@ Repository for the project 'Grayscale Image Colorization'.
 
 ---
 
+# Implementation Plan: Grayscale Image Colorization
+
+## 1. Project Positioning
+
+The project should be framed as automatic grayscale image colorization: given only the luminance information of an image, the model must predict plausible chrominance values. The key point from the project statement and the papers is that this is not a deterministic reconstruction problem. Many valid color images can share the same grayscale image, so a successful project should show how different learning formulations handle this ambiguity.
+
+The project statement explicitly expects:
+
+- A grayscale/color image dataset from ImageNet, BSDS, or another public image source.
+- Conversion to CIE Lab color space.
+- A CNN that predicts chrominance from luminance.
+- At least two formulation variants, especially regression versus classification.
+- Experiments studying class rebalancing and architectural choices.
+- Qualitative and quantitative evaluation.
+
+Therefore, the core project should not be centered only on a GAN. The strongest and safest structure is:
+
+1. Implement a direct regression baseline.
+2. Implement a classification-based colorization model inspired by Zhang, Isola, and Efros.
+3. Add class rebalancing to the classification model.
+4. Optionally add a conditional GAN if the required models and experiments are already complete.
+
+This directly matches the project statement and gives a defensible experimental story.
+
+## 2. Paper-Grounded Design Choices
+
+### 2.1 Zhang et al., Colorful Image Colorization
+
+This should be the main technical reference. Its central claim is that colorization is multimodal, so predicting a single continuous color with an L2-style loss tends to produce averaged, desaturated colors. The paper addresses this by turning colorization into per-pixel classification over quantized `ab` color bins in Lab space.
+
+Ideas to adopt:
+
+- Use CIE Lab color space.
+- Use `L` as input and `ab` as prediction target.
+- Compare regression with classification.
+- Quantize `ab` into color bins.
+- Use soft or hard color-bin labels.
+- Apply class rebalancing to rare saturated colors.
+- Decode predicted color distributions back into `ab`.
+- Evaluate not only pixel accuracy, but also visual realism and color vividness.
+
+For the course project, we do not need to reproduce the full 313-bin ImageNet-scale setup. A simplified implementation is acceptable if clearly justified and experimentally evaluated.
+
+### 2.2 Cheng et al., Deep Colorization
+
+This paper is useful mainly for motivation and historical context. It shows the transition from hand-engineered descriptors, semantic features, clustering, and post-processing toward learned automatic colorization.
+
+Ideas to discuss, but probably not implement:
+
+- Colorization benefits from semantic and contextual information.
+- Local grayscale patches alone are ambiguous.
+- Post-processing can improve spatial smoothness.
+- Scene context can reduce ambiguity.
+
+We should not implement the full Cheng pipeline because it relies on hand-designed descriptors, scene parsing, adaptive clustering, and filtering. That would distract from the course requirement to implement deep learning variants.
+
+### 2.3 Nazeri et al., Image Colorization using GANs
+
+This paper is useful as an optional extension. It shows that adversarial training can make outputs more visually realistic than pure reconstruction losses, but GAN training is harder to stabilize and evaluate.
+
+Ideas to adopt only after the required models work:
+
+- Use a U-Net-like generator.
+- Use a conditional discriminator that sees both the grayscale input and either the real or generated color image.
+- Combine adversarial loss with an L1 reconstruction loss.
+- Compare whether adversarial training improves color vividness at the cost of stability.
+
+The GAN variant should be positioned as an extension, not the core deliverable, because the project statement specifically asks for regression versus classification and class rebalancing.
+
+## 3. Proposed Scope
+
+### Minimum Complete Project
+
+The minimum complete project should include:
+
+- Dataset loader.
+- Lab conversion pipeline.
+- Regression baseline.
+- Classification model without class rebalancing.
+- Classification model with class rebalancing.
+- Training scripts.
+- Evaluation scripts.
+- Qualitative result grids.
+- Quantitative comparison table.
+- Short ablation on the effect of class rebalancing.
+
+This is enough to satisfy the official expectations.
+
+### Strong Project
+
+A stronger version should add:
+
+- Soft encoding of `ab` labels rather than hard bin labels.
+- Annealed-mean decoding instead of simple argmax decoding.
+- A small architecture comparison, such as plain encoder-decoder versus U-Net.
+- Colorfulness or mean chroma metric.
+- Failure-case analysis.
+
+### Optional Extension
+
+Only if the required work is complete:
+
+- Conditional GAN trained on the regression target.
+- Comparison against regression baseline.
+- Short discussion of training instability and perceptual quality.
+
+## 4. Dataset Plan
+
+### 4.1 Dataset Choice
+
+Use either:
+
+- BSDS if we want fast experiments and simple setup.
+- ImageNet subset if we want a more representative dataset.
+
+Recommended practical choice:
+
+- Start with BSDS or a small ImageNet subset for development.
+- Keep the code dataset-agnostic so a larger image folder can be used later.
+
+The project statement allows ImageNet or Berkeley Segmentation Dataset. BSDS is smaller, which makes it suitable for a course project and for running several controlled variants.
+
+### 4.2 Splits
+
+Use fixed splits:
+
+- Training set: 80%.
+- Validation set: 10%.
+- Test set: 10%.
+
+If using a predefined dataset split, preserve it. Save split filenames to text files so every model uses the same images.
+
+### 4.3 Preprocessing
+
+For each RGB image:
+
+1. Load image as RGB.
+2. Resize or center-crop to a fixed resolution, for example `128 x 128` or `256 x 256`.
+3. Convert RGB to Lab.
+4. Normalize:
+   - `L`: scale from `[0, 100]` to `[-1, 1]` or `[0, 1]`.
+   - `a,b`: scale from approximately `[-128, 127]` to `[-1, 1]`.
+5. Return:
+   - Input: tensor of shape `[1, H, W]`.
+   - Regression target: tensor of shape `[2, H, W]`.
+   - Classification target: tensor of shape `[H, W]` containing color-bin IDs.
+
+All model variants should use the same preprocessing, except for the target representation.
+
+## 5. Color Space and Target Representation
+
+### 5.1 Why Lab Space
+
+Lab separates luminance from chrominance:
+
+- `L` contains grayscale/lightness information.
+- `a` and `b` contain color information.
+
+This makes it natural to use `L` as the input and predict only `ab`. It also follows the project statement and Zhang et al.
+
+### 5.2 Regression Target
+
+The regression baseline predicts two continuous channels:
+
+```text
+input:  L       shape [B, 1, H, W]
+output: ab_hat  shape [B, 2, H, W]
+target: ab      shape [B, 2, H, W]
+```
+
+Recommended loss:
+
+```text
+L_reg = mean absolute error(ab_hat, ab)
+```
+
+L1 is preferred over L2 because it is less sensitive to outliers and often gives sharper outputs. We can still mention that L2-style regression is the classical dull-color baseline discussed by Zhang et al.
+
+### 5.3 Classification Target
+
+The classification model predicts a distribution over quantized `ab` bins:
+
+```text
+input:  L            shape [B, 1, H, W]
+output: logits       shape [B, K, H, W]
+target: bin indices  shape [B, H, W]
+```
+
+Here `K` is the number of color bins.
+
+A full Zhang-style implementation uses 313 in-gamut bins. For this project, a simpler scheme is acceptable:
+
+- Build a regular grid over `a,b`, for example 10 x 10 or 16 x 16.
+- Remove bins that are never or rarely used.
+- Map every pixel's `ab` value to the nearest valid bin.
+
+Recommended starting point:
+
+- `K` between 64 and 128 bins.
+- Ignore extremely rare bins or merge them into nearby bins.
+
+This keeps the classification problem manageable on a small dataset.
+
+### 5.4 Soft Encoding
+
+A stronger implementation should use soft labels:
+
+- For each ground-truth `ab` value, find the nearest `k` color bins.
+- Assign weights based on distance in `ab` space.
+- Train with soft cross-entropy.
+
+If time is limited, use hard bin labels first. Soft encoding can be added later as an improvement.
+
+### 5.5 Decoding
+
+Classification outputs must be converted back to continuous `ab`.
+
+Implement at least:
+
+- Argmax decoding: choose the most probable bin.
+
+If time allows, add:
+
+- Annealed-mean decoding inspired by Zhang et al.
+
+Annealed mean:
+
+1. Take predicted probabilities over bins.
+2. Sharpen the distribution with temperature `T < 1`.
+3. Compute the weighted average of bin centers.
+
+This is a good compromise between mean decoding, which can be dull, and argmax decoding, which can be unstable.
+
+## 6. Model Architecture Plan
+
+### 6.1 Shared Backbone
+
+Use one shared CNN architecture family for both regression and classification so the comparison focuses on the prediction formulation rather than unrelated architectural differences.
+
+Recommended architecture:
+
+- U-Net-style encoder-decoder.
+- Input channel: 1.
+- Encoder: convolution blocks with downsampling.
+- Decoder: upsampling blocks.
+- Skip connections from encoder to decoder.
+- Output head changes depending on formulation:
+  - Regression head: 2 output channels with `tanh`.
+  - Classification head: `K` output channels with raw logits.
+
+This architecture is simple, familiar from image-to-image tasks, and consistent with the GAN paper's generator design.
+
+### 6.2 Regression Model
+
+Output:
+
+```text
+[B, 2, H, W]
+```
+
+Final activation:
+
+- `tanh` if `ab` is normalized to `[-1, 1]`.
+- No activation if using unnormalized Lab values, though normalized targets are cleaner.
+
+Loss:
+
+- Main: L1 loss.
+- Optional: L2 loss comparison if time allows.
+
+### 6.3 Classification Model
+
+Output:
+
+```text
+[B, K, H, W]
+```
+
+Final activation:
+
+- No softmax inside the model.
+- Use cross-entropy loss, which applies log-softmax internally.
+
+Loss:
+
+- Cross-entropy without rebalancing.
+- Cross-entropy with class weights.
+
+### 6.4 Optional GAN Model
+
+Only after required variants are complete:
+
+Generator:
+
+- Reuse the regression U-Net.
+- Input `L`, output `ab`.
+
+Discriminator:
+
+- Conditional PatchGAN-style discriminator.
+- Input concatenation: `[L, ab]`, so 3 channels total.
+- Output patch-level real/fake map.
+
+Loss:
+
+```text
+L_G = L_adv + lambda * L1(ab_hat, ab)
+L_D = real/fake adversarial loss
+```
+
+Use `lambda = 100` as in the GAN paper unless experiments suggest otherwise.
+
+## 7. Class Rebalancing Plan
+
+Class rebalancing is central to the project. The reason is that natural images contain many low-saturation pixels. Without rebalancing, the model learns that grayish colors are usually safe.
+
+Implementation:
+
+1. Before training, scan the training set.
+2. Convert each image to Lab.
+3. Quantize each pixel's `ab` value to a bin.
+4. Count bin frequencies.
+5. Convert frequencies to class weights.
+6. Use those weights in the classification loss.
+
+Simple weighting:
+
+```text
+weight_c = 1 / (frequency_c + epsilon)
+```
+
+Better weighting:
+
+```text
+weight_c = 1 / ((1 - lambda) * frequency_c + lambda / K)
+```
+
+Then normalize weights so their mean is 1.
+
+Recommended:
+
+- Start with the simple weighting.
+- Clip very large weights to avoid unstable training.
+- Report the exact weighting formula in the Methods section.
+
+Experiments should compare:
+
+- Classification without class weights.
+- Classification with class weights.
+
+Expected outcome:
+
+- Rebalancing should increase color vividness and rare-color prediction.
+- It may reduce pixel-level accuracy because the model is less biased toward safe average colors.
+
+## 8. Training Plan
+
+### 8.1 Training Setup
+
+Use PyTorch.
+
+Recommended defaults:
+
+- Image size: `128 x 128` for fast iteration, `256 x 256` if hardware allows.
+- Batch size: 8 to 32 depending on GPU memory.
+- Optimizer: Adam.
+- Learning rate: `1e-4` or `2e-4`.
+- Epochs: enough for convergence on the selected dataset, likely 30 to 100 for small datasets.
+- Validation after every epoch.
+- Save best checkpoint by validation loss.
+
+### 8.2 Training Scripts
+
+The codebase should have separate, simple scripts:
+
+```text
+src/
+  data.py
+  color_bins.py
+  models.py
+  losses.py
+  metrics.py
+  train_regression.py
+  train_classification.py
+  evaluate.py
+  visualize.py
+```
+
+Each script should be runnable from the command line with clear arguments:
+
+```text
+python src/train_regression.py --data data/bsds --image-size 128 --epochs 50
+python src/train_classification.py --data data/bsds --bins 96 --rebalance
+python src/evaluate.py --checkpoint checkpoints/model.pt --model classification
+```
+
+### 8.3 Reproducibility
+
+Set and report:
+
+- Random seed.
+- Dataset split.
+- Image size.
+- Batch size.
+- Learning rate.
+- Number of epochs.
+- Number of bins.
+- Rebalancing formula.
+
+Save:
+
+- Model checkpoints.
+- Training curves.
+- Metrics CSV files.
+- Qualitative image grids.
+
+## 9. Evaluation Plan
+
+### 9.1 Quantitative Metrics
+
+Use several metrics because no single metric fully captures colorization quality.
+
+Recommended metrics:
+
+- MAE in `ab` space.
+- RMSE in `ab` space.
+- PSNR in RGB space.
+- SSIM in RGB space.
+- Mean chroma:
+
+```text
+chroma = sqrt(a^2 + b^2)
+```
+
+- Optional colorfulness metric.
+
+Interpretation:
+
+- Regression may score well on MAE/PSNR because it predicts safe average colors.
+- Classification with rebalancing may produce more vivid images but not always better pixel accuracy.
+- Colorfulness/chroma helps show whether the model avoids desaturated predictions.
+
+### 9.2 Qualitative Evaluation
+
+For a fixed validation/test subset, create grids:
+
+```text
+grayscale input | ground truth | regression | classification | classification + rebalancing
+```
+
+Choose examples that show:
+
+- Natural outdoor scenes.
+- Indoor scenes.
+- Objects with ambiguous colors.
+- Highly saturated objects.
+- Failure cases.
+
+Qualitative results are important because colorization is perceptual and multimodal.
+
+### 9.3 Ablations
+
+Minimum ablations:
+
+1. Regression versus classification.
+2. Classification without rebalancing versus with rebalancing.
+
+Strong ablations:
+
+1. Number of color bins: for example 64 versus 128.
+2. Argmax versus annealed-mean decoding.
+3. Plain encoder-decoder versus U-Net skip connections.
+4. L1 versus L2 regression.
+
+The report does not need too many ablations. It needs a coherent set that supports the main claim.
+
+## 10. Expected Experimental Story
+
+The final report should aim to show the following:
+
+1. Direct regression is simple and stable, but tends to produce dull or averaged colors.
+2. Classification better matches the multimodal nature of colorization.
+3. Class rebalancing increases color vividness by correcting the dominance of low-saturation bins.
+4. There is a tradeoff between pixel-level reconstruction accuracy and perceptual plausibility.
+
+This story is directly grounded in Zhang et al. and aligns with the project statement.
+
+## 11. Suggested Milestones
+
+### Milestone 1: Literature and Setup
+
+Deliverables:
+
+- Short notes on the three papers.
+- Dataset selected and downloaded.
+- Dataset splits fixed.
+- Lab conversion verified visually.
+
+Success check:
+
+- A script can display RGB image, grayscale `L`, and reconstructed RGB from original `L,ab`.
+
+### Milestone 2: Regression Baseline
+
+Deliverables:
+
+- PyTorch dataset returning `(L, ab)`.
+- U-Net or encoder-decoder regression model.
+- Training loop.
+- Validation loop.
+- First qualitative predictions.
+
+Success check:
+
+- Loss decreases.
+- Reconstructed validation images have plausible but likely muted colors.
+
+### Milestone 3: Color Quantization
+
+Deliverables:
+
+- Color-bin creation.
+- Pixel-to-bin encoding.
+- Bin-to-`ab` decoding.
+- Visualization of bin distribution.
+
+Success check:
+
+- A ground-truth image can be quantized and decoded with acceptable visual degradation.
+
+### Milestone 4: Classification Model
+
+Deliverables:
+
+- Classification output head.
+- Cross-entropy training.
+- Argmax decoding.
+- Quantitative and qualitative evaluation.
+
+Success check:
+
+- Classification model trains without shape errors.
+- Decoded outputs are visually coherent.
+
+### Milestone 5: Class Rebalancing
+
+Deliverables:
+
+- Training-set bin-frequency estimator.
+- Class-weight computation.
+- Weighted classification training.
+- Comparison table and image grids.
+
+Success check:
+
+- Rebalanced model produces higher chroma or visibly more saturated colors than unweighted classification.
+
+### Milestone 6: Report and Presentation
+
+Deliverables:
+
+- Final metrics table.
+- Training curves.
+- Qualitative result figure.
+- Failure-case figure.
+- 4 to 6 page IEEE-style report.
+- 15 to 20 minute group presentation.
+
+Success check:
+
+- The report can explain why each model was implemented and what the experiments show.
+
+## 12. Division of Work for Three Members
+
+### Member 1: Data and Evaluation
+
+Responsibilities:
+
+- Dataset loading and preprocessing.
+- Lab conversion utilities.
+- Color-bin frequency analysis.
+- Metrics implementation.
+- Visualization grids.
+
+### Member 2: Regression and Architecture
+
+Responsibilities:
+
+- Regression model.
+- U-Net or encoder-decoder architecture.
+- Regression training loop.
+- Architecture ablation if time allows.
+
+### Member 3: Classification and Rebalancing
+
+Responsibilities:
+
+- Color quantization.
+- Classification model head.
+- Cross-entropy training.
+- Class rebalancing.
+- Decoding methods.
+
+All members should understand all models before the oral defense. The oral score is individual, so no one should be isolated to only one small script.
+
+## 13. Report Structure
+
+Use the required IEEE-style 4 to 6 page structure.
+
+### Abstract
+
+State the problem, the three implemented variants, and the main quantitative and qualitative finding.
+
+### Introduction
+
+Explain why grayscale colorization is ill-posed and multimodal. Mention historical grayscale imagery and self-supervised learning motivation briefly.
+
+### Related Work
+
+Discuss:
+
+- Cheng et al. as an early automatic deep colorization pipeline.
+- Zhang et al. as the main classification and rebalancing reference.
+- Nazeri et al. as the GAN-based perceptual realism reference.
+
+### Data
+
+Describe:
+
+- Dataset source.
+- Number of images.
+- Train/validation/test split.
+- Image resolution.
+- Lab conversion.
+- Normalization.
+
+### Methods
+
+Describe:
+
+- Shared CNN/U-Net backbone.
+- Regression formulation.
+- Classification formulation.
+- Color quantization.
+- Class rebalancing formula.
+- Decoding method.
+
+### Experiments
+
+Include:
+
+- Metrics table.
+- Training curves.
+- Qualitative comparison grid.
+- Ablation on rebalancing.
+- Short failure-case analysis.
+
+### Conclusion
+
+Summarize:
+
+- Regression is stable but dull.
+- Classification handles ambiguity better.
+- Rebalancing improves vividness.
+- Future work could include GANs, larger datasets, or semantic conditioning.
+
+## 14. Risks and Mitigations
+
+### Risk: Dataset Too Small
+
+Mitigation:
+
+- Use data augmentation.
+- Keep claims modest.
+- Focus on controlled comparison rather than state-of-the-art results.
+
+### Risk: Classification Has Too Many Classes
+
+Mitigation:
+
+- Use fewer bins.
+- Remove unused bins.
+- Start with hard labels before soft encoding.
+
+### Risk: Rebalancing Makes Training Unstable
+
+Mitigation:
+
+- Clip class weights.
+- Normalize weights to mean 1.
+- Lower learning rate.
+
+### Risk: Quantitative Metrics Favor Dull Regression
+
+Mitigation:
+
+- Report colorfulness/chroma.
+- Include qualitative grids.
+- Explain multimodality and the difference between exact reconstruction and plausible colorization.
+
+### Risk: GAN Takes Too Long
+
+Mitigation:
+
+- Treat GAN as optional.
+- Do not start GAN until regression, classification, and rebalancing experiments are complete.
+
+## 15. Final Recommendation
+
+The project should be built around the comparison:
+
+```text
+Regression baseline
+vs.
+Classification without class rebalancing
+vs.
+Classification with class rebalancing
+```
+
+This is the best match to the official project statement and the strongest lesson from the papers. The GAN paper should be used mainly in related work and only implemented as an optional extension. A clear, well-tested implementation of the three required variants will make for a stronger report and oral defense than an unstable GAN-centered project.
+
+---
+
 ## Checklist: Project Management Tasks (Need approval)
 
 - [ ] **Phase 1 - Project Scoping and Alignment**
