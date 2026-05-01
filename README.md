@@ -46,10 +46,6 @@ Repository for the project 'Grayscale Image Colorization'.
 * **TensorFlow GAN Baseline:** [https://github.com/ImagingLab/Colorizing-with-GANs](https://github.com/ImagingLab/Colorizing-with-GANs)
 * **Class Rebalancing & Classification Reference:** [https://github.com/richzhang/colorization?tab=readme-ov-file](https://github.com/richzhang/colorization?tab=readme-ov-file)
 
-### Group Workspace
-* **Overleaf (Initial Draft):** [https://fr.overleaf.com/2338948479ybxkfzrddjkj#6f4e3c](https://fr.overleaf.com/2338948479ybxkfzrddjkj#6f4e3c)
-* **Overleaf (Premium Link):** [https://fr.overleaf.com/3745371124qvcbvscryrjw#af1990](https://fr.overleaf.com/3745371124qvcbvscryrjw#af1990)
-
 ### Official Course Resources
 * **IEEE Final Report Templates:** [https://www.ieee.org/conferences/publishing/templates](https://www.ieee.org/conferences/publishing/templates)
 
