@@ -9,7 +9,6 @@ Repository for the project 'Grayscale Image Colorization'.
 * **Code Status:** Preliminary draft of the Generator and Discriminator classes initialized, structured similarly to practical sessions.
 * **Dataset:** ImageNet.
 * **Report Status:** Overleaf document created; initial algorithm description drafted.
-* **Timeline:** Active collaboration from all members to begin next week due to ongoing thesis workloads.
 
 ## 2. Official Project Expectations & Deliverables
 * **Technical Objectives:** Process images in the CIE Lab color space, taking the L (luminance) channel as input to predict the ab (chrominance) channels.
