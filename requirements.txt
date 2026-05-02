@@ -1,0 +1,8 @@
+# --- Deep Learning ---
+torch
+torchvision
+numpy
+
+# --- Image & Viz ---
+Pillow
+matplotlib

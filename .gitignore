@@ -1,80 +1,45 @@
-# Python bytecode and caches
-__pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.pyre/
-.hypothesis/
-.coverage
-.coverage.*
-htmlcov/
+# --- Project Instructions & References ---
+Project\ infos/
+papers/
+pictures/
+Deep_Learning_Projects_2025_2026.pdf
 
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-.env
-.env.*
-!.env.example
+# --- Datasets ---
+regression/dataset/
+data/
+datasets/
+*.mat
+*.jpg
+*.jpeg
+*.png
 
-# Jupyter
-.ipynb_checkpoints/
-
-# Build and package artifacts
-build/
-dist/
-*.egg-info/
-.eggs/
-pip-wheel-metadata/
-
-# ML experiment outputs and generated artifacts
+# --- ML Artifacts ---
 checkpoints/
-checkpoint/
 models/
 weights/
-runs/
-wandb/
-mlruns/
-lightning_logs/
-tensorboard/
 outputs/
-output/
 results/
 logs/
-*.ckpt
-*.pt
 *.pth
-*.pkl
-*.pickle
-*.joblib
-*.onnx
+*.pt
 *.h5
-*.hdf5
-
-# Large local/generated numeric arrays
+*.pkl
+*.joblib
 *.npy
 *.npz
 
-# Local datasets and scratch space
-data/
-datasets/
-tmp/
-temp/
-scratch/
+# --- Python & Environnement ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.env
+.pytest_cache/
+.ipynb_checkpoints/
 
-# IDE and editor files
+# --- IDEs & OS ---
 .vscode/
 .idea/
-*.code-workspace
-
-# OS files
 .DS_Store
 Thumbs.db
-desktop.ini
-
-# OneDrive and Office temporary files
-~$*
-*.tmp
