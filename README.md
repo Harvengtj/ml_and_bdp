@@ -1,5 +1,6 @@
 # Machine Learning and Big Data Processing
 
+
 Repository for the project **Grayscale Image Colorization**.
 
 # GAN-Based Grayscale Image Colorization
@@ -53,6 +54,7 @@ The discriminator then predicts whether the pair is real or fake. A PatchGAN-sty
 ### Main Implementation Reference
 
 **Image Colorization using Generative Adversarial Networks**
+- **Code:** <https://github.com/ImagingLab/Colorizing-with-GANs>
 
 Used for:
 
@@ -66,6 +68,7 @@ Used for:
 ### Supporting References
 
 **Colorful Image Colorization**
+- **Code:** <http://richzhang.github.io/colorization/>
 
 Used for:
 
@@ -75,6 +78,7 @@ Used for:
 - class rebalancing as context
 
 **Deep Colorization**
+- **Code:** <http://www.cs.cityu.edu.hk/~qiyang/publications/iccv15/>
 
 Used for:
 
