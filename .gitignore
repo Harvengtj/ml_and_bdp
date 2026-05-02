@@ -1,19 +1,14 @@
-# --- Project Instructions & References ---
-Project\ infos/
-papers/
-pictures/
-Deep_Learning_Projects_2025_2026.pdf
+# --- Project Documentation & References ---
+docs/
 
-# --- Datasets ---
-regression/dataset/
+# --- Datasets (Lourd) ---
 data/
-datasets/
 *.mat
 *.jpg
 *.jpeg
 *.png
 
-# --- ML Artifacts ---
+# --- ML Artifacts (Poids du modèle, Logs) ---
 checkpoints/
 models/
 weights/
@@ -29,6 +24,7 @@ logs/
 *.npz
 
 # --- Python & Environnement ---
+src/__pycache__/
 __pycache__/
 *.py[cod]
 .venv/
