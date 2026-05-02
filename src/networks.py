@@ -1,168 +1,84 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim as optim
-import torchvision
-from torch.utils.data import Dataset, DataLoader
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+import math
 
-
-#===========================================================================================================================
-#=== GENERATOR ===
-#===========================================================================================================================
 class Generator(nn.Module):
-    def __init__(self):
+    def __init__(self, input_nc=1, output_nc=2, image_size=256, ngf=64, use_classification=False, num_bins=100):
         super().__init__()
+        self.use_classification = use_classification
+        self.num_bins = num_bins
+        final_output_nc = num_bins if use_classification else output_nc
         
-        #-------------------------------------------------------------------------------------------------------------------
-        # Encoder layers: 1 - 2: Conv2d, no BN, leaky-ReLu
-        #                 2 - 9: Conv2d, BN, leaky-ReLu 
-        #
-        # Size output: H_out = (H_in - K + 2P) / S + 1 
-        #              W_out = (W_in - K + 2P) / S + 1
-        self.conv1_2 = nn.Conv2d(in_channels=1, out_channels=64, kernel_size=3, stride=1, padding=1) # attention to size
-        self.conv2_3 = nn.Conv2d(in_channels=64, out_channels=64, kernel_size=4, stride=2, padding=1)
-        self.conv3_4 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1)
-        self.conv4_5 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1)
-        self.conv5_6 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=2, padding=1)
-        self.conv6_7 = nn.Conv2d(in_channels=512, out_channels=512, kernel_size=4, stride=2, padding=1)
-        self.conv7_8 = nn.Conv2d(in_channels=512, out_channels=512, kernel_size=4, stride=2, padding=1)
-        self.conv8_9 = nn.Conv2d(in_channels=512, out_channels=512, kernel_size=4, stride=2, padding=1)
+        num_downs = int(math.log2(image_size))
+        unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, innermost=True)
+        for _ in range(num_downs - 5):
+            unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, use_dropout=True)
+        unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block)
+        unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block)
+        unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block)
         
-        #-------------------------------------------------------------------------------------------------------------------
-        # Decoder layer: 9 - 2: ConvTranspose2d, BN, ReLu, concatenation
-        #                2 - 1: ConvTranspose2d, no BN, ReLu
-        #                1 - 0: ConvTranspose2d, no BN, tanh
-        #
-        # Size output: H_out = (H_in - 1) * S - 2 * P + K (+ output_padding)
-        #              W_out = (W_in - 1) * S - 2 * P + K (+ output_padding)
-        self.deconv9_8 = nn.ConvTranspose2d(in_channels=512, out_channels=512, kernel_size=4, stride=2, padding=1)
-        self.deconv8_7 = nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1)
-        self.deconv7_6 = nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=4, stride=2, padding=1)
-        self.deconv6_5 = nn.ConvTranspose2d(in_channels=1024, out_channels=256, kernel_size=4, stride=2, padding=1)
-        self.deconv5_4 = nn.ConvTranspose2d(in_channels=512, out_channels=128, kernel_size=4, stride=2, padding=1)
-        self.deconv4_3 = nn.ConvTranspose2d(in_channels=256, out_channels=64, kernel_size=4, stride=2, padding=1)
-        self.deconv3_2 = nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=4, stride=2, padding=1)
-        self.deconv2_1 = nn.ConvTranspose2d(in_channels=128, out_channels=3, kernel_size=4, stride=2, padding=1)
-        self.deconv1_0 = nn.Conv2d(in_channels=3, out_channels=3, kernel_size=1) # 1x1 conv with tanh and stride 1
+        # Passer use_classification à la couche de sortie
+        self.model = UnetSkipConnectionBlock(final_output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, use_classification=use_classification)
 
-        #-------------------------------------------------------------------------------------------------------------------
-        # Batch norm 2D
-        # no bn1_2
-        self.bn2_3 = nn.BatchNorm2d(num_features=64)
-        self.bn3_4 = nn.BatchNorm2d(num_features=128)
-        self.bn4_5 = nn.BatchNorm2d(num_features=256)
-        self.bn5_6 = nn.BatchNorm2d(num_features=512)
-        self.bn6_7 = nn.BatchNorm2d(num_features=512)
-        self.bn7_8 = nn.BatchNorm2d(num_features=512)
-        self.bn8_9 = nn.BatchNorm2d(num_features=512)
-        self.bn9_8 = nn.BatchNorm2d(num_features=512)
-        self.bn8_7 = nn.BatchNorm2d(num_features=512)
-        self.bn7_6 = nn.BatchNorm2d(num_features=512)
-        self.bn6_5 = nn.BatchNorm2d(num_features=256)
-        self.bn5_4 = nn.BatchNorm2d(num_features=128)
-        self.bn4_3 = nn.BatchNorm2d(num_features=64)
-        self.bn3_2 = nn.BatchNorm2d(num_features=64)
-        # no bn2_1
-        # no bn1_0
-        #-------------------------------------------------------------------------------------------------------------------
-   
-    def forward(self, enc_x1):
-        # --- Encoder ---
-        # Layer 1-2: (1, 256, 256) --> (64, 256, 256)
-        enc_x2 = F.leaky_relu(self.conv1_2(enc_x1), negative_slope=0.2) # no batch norm
-        # Layer 2-3: (64, 256, 256) --> (64, 128, 128)
-        enc_x3 = F.leaky_relu(self.bn2_3(self.conv2_3(enc_x2)), negative_slope=0.2)
-        # Layer 3-4: (64, 128, 128) --> (128, 64, 64)
-        enc_x4 = F.leaky_relu(self.bn3_4(self.conv3_4(enc_x3)), negative_slope=0.2)
-        # Layer 4-5: (128, 64, 64) --> (256, 32,32)
-        enc_x5 = F.leaky_relu(self.bn4_5(self.conv4_5(enc_x4)), negative_slope=0.2)
-        # Layer 5-6: (256, 32,32) --> (512, 16, 16)
-        enc_x6 = F.leaky_relu(self.bn5_6(self.conv5_6(enc_x5)), negative_slope=0.2)
-        # Layer 6-7: (512, 16, 16) --> (512, 8, 8)
-        enc_x7 = F.leaky_relu(self.bn6_7(self.conv6_7(enc_x6)), negative_slope=0.2)
-        # Layer 7-8: (512, 8, 8) --> (512, 4, 4)
-        enc_x8 = F.leaky_relu(self.bn7_8(self.conv7_8(enc_x7)), negative_slope=0.2)
-        # Layer 8-9: (512, 4, 4) --> (512, 2, 2)
-        enc_x9 = F.leaky_relu(self.bn8_9(self.conv8_9(enc_x8)), negative_slope=0.2)
-        
-        # --- Decoder ---
-        # Layer 9-8: (512, 2, 2) --> (512, 4, 4)
-        dec_x8 = F.relu(self.bn9_8(self.deconv9_8(enc_x9)))
-        dec_x8 = torch.cat([enc_x8, dec_x8], dim=1)  # dim = 1 corresponds to channels
-        # Layer 8-7: (1024, 4, 4) --> (512, 8, 8)
-        dec_x7 = F.relu(self.bn8_7(self.deconv8_7(dec_x8)))
-        dec_x7 = torch.cat([enc_x7, dec_x7], dim=1)
-        # Layer 7-6: (1024, 8, 8) --> (512, 16, 16)
-        dec_x6 = F.relu(self.bn7_6(self.deconv7_6(dec_x7)))
-        dec_x6 = torch.cat([enc_x6, dec_x6], dim=1)
-        # Layer 6-5: (1024, 16, 16) --> (256, 32, 32)
-        dec_x5 = F.relu(self.bn6_5(self.deconv6_5(dec_x6)))
-        dec_x5 = torch.cat([enc_x5, dec_x5], dim=1)
-        # Layer 5-4: (512, 32, 32) --> (128, 64, 64)
-        dec_x4 = F.relu(self.bn5_4(self.deconv5_4(dec_x5)))
-        dec_x4 = torch.cat([enc_x4, dec_x4], dim=1)
-        # Layer 4-3: (256, 64, 64) --> (64, 128, 128)
-        dec_x3 = F.relu(self.bn4_3(self.deconv4_3(dec_x4)))
-        dec_x3 = torch.cat([enc_x3, dec_x3], dim=1)
-        # Layer 3-2: (128, 128, 128) --> (64, 256, 256)
-        dec_x2 = F.relu(self.bn3_2(self.deconv3_2(dec_x3)))
-        dec_x2 = torch.cat([enc_x2, dec_x2], dim=1)
-        # Layer 2-1: (128, 256, 256) --> (3, 256, 256)
-        dec_x1 = F.relu(self.deconv2_1(dec_x2)) # no batch norm
-        # Layer 1-0: (3, 256, 256) --> (3, 256, 256)
-        dec_x0 = torch.tanh(self.deconv1_0(dec_x1)) # no batch norm
-        
-        return dec_x0
-    
-    
+    def forward(self, x):
+        return self.model(x)
 
+class UnetSkipConnectionBlock(nn.Module):
+    def __init__(self, outer_nc, inner_nc, input_nc=None,
+                 submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False, use_classification=False):
+        super().__init__()
+        self.outermost = outermost
+        if input_nc is None:
+            input_nc = outer_nc
 
-#===========================================================================================================================
-#=== DISCRIMINATOR ===
-#===========================================================================================================================
+        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4, stride=2, padding=1, bias=False)
+        downrelu = nn.LeakyReLU(0.2, True)
+        downnorm = norm_layer(inner_nc)
+        uprelu = nn.ReLU(True)
+        upnorm = norm_layer(outer_nc)
+
+        if outermost:
+            upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc, kernel_size=4, stride=2, padding=1)
+            # Pas de Tanh si on fait de la classification (on veut les logits)
+            # Pour la régression, Tanh est bon car on normalise les cibles entre [-1, 1]
+            if use_classification:
+                up = [uprelu, upconv]
+            else:
+                up = [uprelu, upconv, nn.Tanh()]
+            model = [downconv] + [submodule] + up
+        elif innermost:
+            upconv = nn.ConvTranspose2d(inner_nc, outer_nc, kernel_size=4, stride=2, padding=1, bias=False)
+            model = [downrelu, downconv] + [uprelu, upconv, upnorm]
+        else:
+            upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc, kernel_size=4, stride=2, padding=1, bias=False)
+            model = [downrelu, downconv, downnorm] + [submodule] + [uprelu, upconv, upnorm]
+            if use_dropout:
+                model += [nn.Dropout(0.5)]
+
+        self.model = nn.Sequential(*model)
+
+    def forward(self, x):
+        if self.outermost:
+            return self.model(x)
+        else:
+            return torch.cat([x, self.model(x)], 1)
+
 class Discriminator(nn.Module):
-    def __init__(self):
+    def __init__(self, input_nc=3):
         super().__init__()
-        #-------------------------------------------------------------------------------------------------------------------
-        
-        # Encoder layers: 1 - 2: Conv2d, no BN, leaky-ReLu
-        #                 1 - 5: Conv2d, BN, leaky-ReLu
-        #                 5 - 6: Conv2d, no BN, sigmoid
-        # Size output: H_out = (H_in - K + 2P) / S + 1 
-        #              W_out = (W_in - K + 2P) / S + 1
-        self.conv1_2 = nn.Conv2d(in_channels=4, out_channels=64, kernel_size=3, stride=1, padding=1) # attention to size
-        self.conv2_3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=4, stride=2, padding=1)
-        self.conv3_4 = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=4, stride=2, padding=1)
-        self.conv4_5 = nn.Conv2d(in_channels=256, out_channels=512, kernel_size=4, stride=2, padding=1)
-        self.conv5_6 = nn.Conv2d(in_channels=512, out_channels=1, kernel_size=4, stride=2, padding=1)
+        self.conv1 = nn.Conv2d(input_nc, 64, kernel_size=4, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1)
+        self.conv3 = nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1)
+        self.conv4 = nn.Conv2d(256, 512, kernel_size=4, stride=1, padding=1)
+        self.final = nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(128)
+        self.bn3 = nn.BatchNorm2d(256)
+        self.bn4 = nn.BatchNorm2d(512)
 
-        #-------------------------------------------------------------------------------------------------------------------
-        # Batch norm 2D
-        # no bn1_2
-        self.bn2_3 = nn.BatchNorm2d(num_features=128)
-        self.bn3_4 = nn.BatchNorm2d(num_features=256)
-        self.bn4_5 = nn.BatchNorm2d(num_features=512)  
-        # no bn5_6
-        
-        #-------------------------------------------------------------------------------------------------------------------
-        
-    def forward(self, dis_x1):
-        # --- Encoder ---
-        # Layer 1-2: (1, 256, 256) --> (64, 256, 256)
-        dis_x2 = F.leaky_relu(self.conv1_2(dis_x1), negative_slope=0.2) # no batch norm
-        # Layer 2-3: (64, 256, 256) --> (128, 128, 128)
-        dis_x3 = F.leaky_relu(self.bn2_3(self.conv2_3(dis_x2)), negative_slope=0.2)
-        # Layer 3-4: (128, 128, 128) --> (256, 64, 64)
-        dis_x4 = F.leaky_relu(self.bn3_4(self.conv3_4(dis_x3)), negative_slope=0.2)
-        # Layer 4-5: (256, 64, 64) --> (512, 32, 32)
-        dis_x5 = F.leaky_relu(self.bn4_5(self.conv4_5(dis_x4)), negative_slope=0.2)
-        # Last layer: (512, 32, 32) --> (1, 32, 32)
-        dis_x6 = torch.sigmoid(self.conv5_6(dis_x5), negative_slope=0.2)
-        
-        return dis_x6
-
-
+    def forward(self, x):
+        x = F.leaky_relu(self.conv1(x), 0.2)
+        x = F.leaky_relu(self.bn2(self.conv2(x)), 0.2)
+        x = F.leaky_relu(self.bn3(self.conv3(x)), 0.2)
+        x = F.leaky_relu(self.bn4(self.conv4(x)), 0.2)
+        return torch.sigmoid(self.final(x))

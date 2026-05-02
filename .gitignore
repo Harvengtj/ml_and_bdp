@@ -1,38 +1,16 @@
-# --- Project Documentation & References ---
-docs/
-
-# --- Datasets (Lourd) ---
+# --- Datasets ---
 data/
-*.mat
 *.jpg
 *.jpeg
 *.png
 
-# --- ML Artifacts (Poids du modèle, Logs) ---
-checkpoints/
-models/
-weights/
-outputs/
-results/
-logs/
-*.pth
-*.pt
-*.h5
-*.pkl
-*.joblib
-*.npy
-*.npz
-
 # --- Python & Environnement ---
 src/__pycache__/
-__pycache__/
-*.py[cod]
 .venv/
 venv/
+venv_new/
 env/
 .env
-.pytest_cache/
-.ipynb_checkpoints/
 
 # --- IDEs & OS ---
 .vscode/
