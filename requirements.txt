@@ -2,6 +2,7 @@
 torch
 torchvision
 numpy
+scikit-learn
 
 # --- Image & Viz ---
 Pillow
