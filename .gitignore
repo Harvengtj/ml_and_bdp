@@ -22,3 +22,11 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
+
+# --- Models ---
+# Ignore all files in models directory
+src/models/*
+# Except the .gitkeep file (to keep the folder on GitHub)
+!src/models/.gitkeep
+# Also ignore all .pth files everywhere
+*.pth

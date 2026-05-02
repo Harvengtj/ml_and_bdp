@@ -1,132 +1,155 @@
-import os
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, Subset
-from skimage.metrics import peak_signal_noise_ratio as psnr
+import torch.nn.functional as F
 import numpy as np
+import matplotlib.pyplot as plt
+from skimage.color import lab2rgb
 
-from dataset import LabColorDataset, get_class_weights
-from networks import Generator, Discriminator
-from utils import bins_to_ab_differentiable, visualize_results
+def bins_to_ab_differentiable(logits, ds_obj, device):
+    """
+    Converts bin logits to AB values in a differentiable way using soft-argmax.
+    """
+    temperature = 0.05
+    probs = F.softmax(logits / temperature, dim=1)
+    
+    num_bins = logits.shape[1]
+    grid_size = int(np.sqrt(num_bins))
+    
+    # Pre-calculate bin centres as tensors
+    bin_indices = torch.arange(num_bins, device=device)
+    a_centers = ((bin_indices // grid_size).float() / grid_size) * 2.0 - 1.0 + (1.0 / grid_size)
+    b_centers = ((bin_indices % grid_size).float() / grid_size) * 2.0 - 1.0 + (1.0 / grid_size)
+    
+    # Reshape for broadcasting: [1, NUM_BINS, 1, 1]
+    a_centers = a_centers.view(1, num_bins, 1, 1)
+    b_centers = b_centers.view(1, num_bins, 1, 1)
+    
+    # Expectation over bins
+    a_out = torch.sum(probs * a_centers, dim=1, keepdim=True)
+    b_out = torch.sum(probs * b_centers, dim=1, keepdim=True)
+    
+    return torch.cat([a_out, b_out], dim=1)
 
-def train_gan_loop(
-    base_path,
-    transform,
-    device,
-    mode='regression', 
-    use_rebalancing=False, 
-    max_samples=1000,
-    batch_size=4,
-    num_epochs=10,
-    lr=2e-4,
-    beta1=0.5,
-    lambda_l1=100,
-    num_bins=100,
-    image_size=256
-):
-    """Unified GAN training loop for both Regression and Classification outputs."""
+def visualize_results(L, fake_out, target, mode, ds_obj, device):
+    """
+    Visualises the input, predicted, and ground truth images.
+    """
+    L_np = L.detach().cpu().numpy().transpose(0, 2, 3, 1)
     
-    # 1. Datasets & Loaders
-    train_ds = LabColorDataset(os.path.join(base_path, "train"), transform=transform, mode=mode, num_bins=num_bins)
-    val_ds = LabColorDataset(os.path.join(base_path, "val"), transform=transform, mode=mode, num_bins=num_bins)
-    
-    if max_samples: 
-        train_ds = Subset(train_ds, range(min(max_samples, len(train_ds))))
-        val_ds = Subset(val_ds, range(min(max_samples // 5, len(val_ds))))
-    
-    print(f"\n--- GAN Training: {mode.upper()} ---")
-    print(f"Training on {len(train_ds)} images.")
-    
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
-    ds_obj = train_ds.dataset if isinstance(train_ds, Subset) else train_ds
-
-    # 2. Models
-    netG = Generator(image_size=image_size, use_classification=(mode=='classification'), num_bins=num_bins).to(device)
-    netD = Discriminator(input_nc=3).to(device)
-    
-    # 3. Losses & Optimizers
-    criterionGAN = nn.BCELoss()
     if mode == 'classification':
-        weights = get_class_weights(ds_obj, num_bins=num_bins).to(device) if use_rebalancing else None
-        criterionContent = nn.CrossEntropyLoss(weight=weights)
+        fake_bins = torch.argmax(fake_out, dim=1).cpu().numpy()
+        fake_ab = ds_obj.bin_to_ab(fake_bins)
+        true_ab = ds_obj.bin_to_ab(target.cpu().numpy())
     else:
-        criterionContent = nn.L1Loss()
+        fake_ab = fake_out.detach().cpu().numpy().transpose(0, 2, 3, 1)
+        true_ab = target.cpu().numpy().transpose(0, 2, 3, 1)
+    
+    num_images = min(L_np.shape[0], 3)
+    fig, axes = plt.subplots(num_images, 3, figsize=(12, 4 * num_images))
+    
+    if num_images == 1:
+        axes = np.expand_dims(axes, axis=0)
 
-    optG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1, 0.999))
-    optD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1, 0.999))
-
-    # 4. Training Loop
-    for epoch in range(num_epochs):
-        netG.train()
-        netD.train()
-        total_loss_G = 0
+    for i in range(num_images):
+        L_chan = (L_np[i] + 1.0) * 50.0
+        ab_pred = fake_ab[i] * 128.0
+        lab_pred = np.concatenate([L_chan, ab_pred], axis=-1)
+        lab_pred[:,:,0] = np.clip(lab_pred[:,:,0], 0, 100)
+        rgb_pred = lab2rgb(lab_pred.astype(np.float64))
         
-        for L, target in train_loader:
-            L, target = L.to(device).float(), target.to(device)
-            if mode == 'regression': target = target.float()
-            
-            # --- Update Discriminator ---
-            optD.zero_grad()
-            if mode == 'regression':
-                real_ab = target
-            else:
-                real_ab = torch.from_numpy(ds_obj.bin_to_ab(target.cpu().numpy())).permute(0, 3, 1, 2).to(device).float()
-            
-            # Real pass
-            pred_real = netD(torch.cat([L, real_ab], 1))
-            loss_D_real = criterionGAN(pred_real, torch.ones_like(pred_real))
-            
-            # Fake pass
-            fake_out = netG(L).float()
-            fake_ab = fake_out if mode == 'regression' else bins_to_ab_differentiable(fake_out, ds_obj, device)
-            pred_fake = netD(torch.cat([L, fake_ab.detach()], 1))
-            loss_D_fake = criterionGAN(pred_fake, torch.zeros_like(pred_fake))
-            
-            loss_D = (loss_D_real + loss_D_fake) * 0.5
-            loss_D.backward()
-            optD.step()
-            
-            # --- Update Generator ---
-            optG.zero_grad()
-            pred_fake_G = netD(torch.cat([L, fake_ab], 1))
-            loss_G_GAN = criterionGAN(pred_fake_G, torch.ones_like(pred_fake_G))
-            
-            # Content Loss (L1 or Cross-Entropy)
-            loss_G_Content = criterionContent(fake_out, target)
-            if mode == 'regression':
-                loss_G_Content *= lambda_l1
-            
-            loss_G = loss_G_GAN + loss_G_Content
-            loss_G.backward()
-            optG.step()
-            
-            total_loss_G += loss_G.item()
+        ab_real = true_ab[i] * 128.0
+        lab_real = np.concatenate([L_chan, ab_real], axis=-1)
+        lab_real[:,:,0] = np.clip(lab_real[:,:,0], 0, 100)
+        rgb_real = lab2rgb(lab_real.astype(np.float64))
+        
+        axes[i, 0].imshow(L_np[i].squeeze(), cmap='gray')
+        axes[i, 0].set_title("Input (L)")
+        axes[i, 0].axis('off')
+        
+        axes[i, 1].imshow(rgb_pred)
+        axes[i, 1].set_title(f"Predicted ({mode})")
+        axes[i, 1].axis('off')
+        
+        axes[i, 2].imshow(rgb_real)
+        axes[i, 2].set_title("Ground Truth")
+        axes[i, 2].axis('off')
+        
+    plt.tight_layout()
+    plt.show()
 
-        # 5. Validation & Visualization
-        if (epoch + 1) == num_epochs:
-            netG.eval()
-            val_psnr = 0
-            with torch.no_grad():
-                for L_v, target_v in val_loader:
-                    L_v = L_v.to(device).float()
-                    out_v = netG(L_v).float()
-                    
-                    if mode == 'classification':
-                        pred_ab = ds_obj.bin_to_ab(torch.argmax(out_v, 1).cpu().numpy())
-                        true_ab = ds_obj.bin_to_ab(target_v.numpy())
-                    else:
-                        pred_ab = out_v.cpu().numpy().transpose(0, 2, 3, 1)
-                        true_ab = target_v.cpu().numpy().transpose(0, 2, 3, 1)
-                    
-                    for i in range(len(L_v)): 
-                        val_psnr += psnr(true_ab[i], pred_ab[i], data_range=2.0)
+def compare_colourisations(netG_reg, netG_cls, val_loader, ds_obj, device, num_samples=10):
+    """
+    Displays a comparison grid: Ground Truth, Input L, Regression Result, Classification Result.
+    """
+    netG_reg.eval()
+    netG_cls.eval()
+    
+    L_list, target_list, reg_list, cls_list = [], [], [], []
+    
+    with torch.no_grad():
+        for L, target in val_loader:
+            L = L.to(device).float()
             
-            avg_psnr = val_psnr / len(val_ds)
-            print(f"Completed {num_epochs} Epochs. Final LossG: {total_loss_G/len(train_loader):.4f}, Final Validation PSNR: {avg_psnr:.2f}")
-            visualize_results(L, fake_out, target, mode, ds_obj, device)
-        else:
-            print(f"Epoch {epoch+1}/{num_epochs} completed | LossG: {total_loss_G/len(train_loader):.4f}", end='\r')
+            # Regression prediction
+            out_reg = netG_reg(L).detach().cpu().numpy().transpose(0, 2, 3, 1)
             
-    return netG, netD
+            # Classification prediction
+            out_cls_logits = netG_cls(L)
+            out_cls_bins = torch.argmax(out_cls_logits, dim=1).cpu().numpy()
+            out_cls = ds_obj.bin_to_ab(out_cls_bins)
+            
+            # Handle target shape for both modes
+            L_np = L.cpu().numpy().transpose(0, 2, 3, 1)
+            if target.ndim == 3: # classification bins
+                target_ab = ds_obj.bin_to_ab(target.numpy())
+            else: # regression ab channels
+                target_ab = target.numpy().transpose(0, 2, 3, 1)
+                
+            L_list.append(L_np)
+            target_list.append(target_ab)
+            reg_list.append(out_reg)
+            cls_list.append(out_cls)
+            
+            if len(np.concatenate(L_list)) >= num_samples:
+                break
+                
+    L_all = np.concatenate(L_list)[:num_samples]
+    target_all = np.concatenate(target_list)[:num_samples]
+    reg_all = np.concatenate(reg_list)[:num_samples]
+    cls_all = np.concatenate(cls_list)[:num_samples]
+    
+    fig, axes = plt.subplots(num_samples, 4, figsize=(16, 4 * num_samples))
+    
+    if num_samples == 1:
+        axes = np.expand_dims(axes, axis=0)
+
+    for i in range(num_samples):
+        L_chan = (L_all[i] + 1.0) * 50.0
+        
+        # 1. Ground Truth
+        lab_gt = np.concatenate([L_chan, target_all[i] * 128.0], axis=-1)
+        rgb_gt = lab2rgb(np.clip(lab_gt, [0,-128,-128], [100,128,128]).astype(np.float64))
+        
+        # 2. Input L
+        input_l = L_all[i].squeeze()
+        
+        # 3. Regression
+        lab_reg = np.concatenate([L_chan, reg_all[i] * 128.0], axis=-1)
+        rgb_reg = lab2rgb(np.clip(lab_reg, [0,-128,-128], [100,128,128]).astype(np.float64))
+        
+        # 4. Classification
+        lab_cls = np.concatenate([L_chan, cls_all[i] * 128.0], axis=-1)
+        rgb_cls = lab2rgb(np.clip(lab_cls, [0,-128,-128], [100,128,128]).astype(np.float64))
+        
+        axes[i, 0].imshow(rgb_gt)
+        axes[i, 0].set_title("Ground Truth")
+        axes[i, 1].imshow(input_l, cmap='gray')
+        axes[i, 1].set_title("Input (L)")
+        axes[i, 2].imshow(rgb_reg)
+        axes[i, 2].set_title("Regression")
+        axes[i, 3].imshow(rgb_cls)
+        axes[i, 3].set_title("Classification")
+        
+        for ax in axes[i]: ax.axis('off')
+        
+    plt.tight_layout()
+    plt.show()

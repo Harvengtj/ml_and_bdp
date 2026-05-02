@@ -1,5 +1,37 @@
-# Machine Learning and Big Data Processing
+# Machine Learning and Big Data Processing - Grayscale Image Colorization
 
+This repository contains a PyTorch implementation of a **Conditional GAN** for automatic grayscale image colorization.
+
+---
+
+## 🚀 Getting Started
+
+### 1. Installation & Environment Setup
+It is recommended to use a virtual environment:
+```bash
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Linux/macOS
+# or venv\Scripts\activate on Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Dataset Preparation
+We use the COCO dataset. You can download and set up a subset automatically:
+```bash
+python scripts/setup_coco.py
+```
+This script downloads the necessary images and organizes them into `data/coco/train` and `data/coco/val`.
+
+### 3. Running the Project
+- **Interactive Training**: Use `src/main.ipynb` to run the training loop step-by-step, visualize results, and compare Regression vs. Classification modes.
+- **Comparison Script**: Run `python src/compare_methods.py` from the root directory to train both models and generate a performance comparison plot in `docs/pictures/`.
+
+---
+
+# Original Project Documentation
 
 Repository for the project **Grayscale Image Colorization**.
 
@@ -276,7 +308,7 @@ Focus:
 ## External References
 
 - TensorFlow GAN baseline: <https://github.com/ImagingLab/Colorizing-with-GANs>
-- Colorful Image Colorization reference: <https://github.com/richzhang/colorization?tab=readme-ov-file>
+- Colorful Image Colorization reference: <https://github.com/richzhang.github.io/colorization/>
 - IEEE final report templates: <https://www.ieee.org/conferences/publishing/templates>
 
 ## Checklist

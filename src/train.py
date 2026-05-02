@@ -19,30 +19,18 @@ def train_gan_loop(
     max_samples=1000,
     batch_size=4,
     num_epochs=10,
-    lr=2e-4,
+    lr=3e-4,
     beta1=0.5,
     lambda_l1=100,
     num_bins=100,
-    image_size=256
+    image_size=256,
+    resume=True # New option to resume training
 ):
     """
-    Unified GAN training loop for both Regression and Classification outputs.
-    
-    Args:
-        base_path (str): Path to dataset folder (containing train/val).
-        transform (callable): Torchvision transforms.
-        device (torch.device): Device to run on (cuda or cpu).
-        mode (str): 'regression' or 'classification'.
-        use_rebalancing (bool): Whether to use class weights for classification.
-        max_samples (int): Cap on the number of images to use.
-        batch_size (int): Batch size for training.
-        num_epochs (int): Number of epochs to train.
-        lr (float): Learning rate.
-        beta1 (float): Beta1 for Adam.
-        lambda_l1 (int): Weight for L1 loss in regression mode.
-        num_bins (int): Number of color bins for classification.
-        image_size (int): Resolution of images.
+    Unified GAN training loop with checkpoint support for multi-day training.
     """
+    os.makedirs('models', exist_ok=True)
+    checkpoint_path = f'models/checkpoint_{mode}.pth'
     
     # 1. Datasets & Loaders
     train_ds = LabColorDataset(os.path.join(base_path, "train"), transform=transform, mode=mode, num_bins=num_bins)
@@ -52,9 +40,6 @@ def train_gan_loop(
         train_ds = Subset(train_ds, range(min(max_samples, len(train_ds))))
         val_ds = Subset(val_ds, range(min(max_samples // 5, len(val_ds))))
     
-    print(f"\n--- Starting GAN Training: {mode.upper()} ---")
-    print(f"Dataset: {base_path} | Samples: {len(train_ds)} | Epochs: {num_epochs}")
-    
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
     ds_obj = train_ds.dataset if isinstance(train_ds, Subset) else train_ds
@@ -63,7 +48,7 @@ def train_gan_loop(
     netG = Generator(image_size=image_size, use_classification=(mode=='classification'), num_bins=num_bins).to(device)
     netD = Discriminator(input_nc=3).to(device)
     
-    # 3. Losses & Optimizers
+    # 3. Losses & Optimisers
     criterionGAN = nn.BCELoss()
     if mode == 'classification':
         weights = get_class_weights(ds_obj, num_bins=num_bins).to(device) if use_rebalancing else None
@@ -74,8 +59,27 @@ def train_gan_loop(
     optG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1, 0.999))
     optD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1, 0.999))
 
+    history = {'loss_G': [], 'psnr': []}
+    start_epoch = 0
+
+    # --- RESUME TRAINING ---
+    if resume and os.path.exists(checkpoint_path):
+        print(f"Loading checkpoint: {checkpoint_path}")
+        # weights_only=False is required as the checkpoint contains history (dictionary/lists)
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        netG.load_state_dict(checkpoint['netG_state_dict'])
+        netD.load_state_dict(checkpoint['netD_state_dict'])
+        optG.load_state_dict(checkpoint['optG_state_dict'])
+        optD.load_state_dict(checkpoint['optD_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        history = checkpoint.get('history', history)
+        print(f"Resuming from epoch {start_epoch}")
+
+    print(f"\n--- Starting GAN Training: {mode.upper()} ---")
+    print(f"Target Epochs: {num_epochs} | Already completed: {start_epoch}")
+
     # 4. Training Loop
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         netG.train()
         netD.train()
         total_loss_G = 0
@@ -91,11 +95,9 @@ def train_gan_loop(
             else:
                 real_ab = torch.from_numpy(ds_obj.bin_to_ab(target.cpu().numpy())).permute(0, 3, 1, 2).to(device).float()
             
-            # Real pass
             pred_real = netD(torch.cat([L, real_ab], 1))
             loss_D_real = criterionGAN(pred_real, torch.ones_like(pred_real))
             
-            # Fake pass
             fake_out = netG(L).float()
             fake_ab = fake_out if mode == 'regression' else bins_to_ab_differentiable(fake_out, ds_obj, device)
             pred_fake = netD(torch.cat([L, fake_ab.detach()], 1))
@@ -110,7 +112,6 @@ def train_gan_loop(
             pred_fake_G = netD(torch.cat([L, fake_ab], 1))
             loss_G_GAN = criterionGAN(pred_fake_G, torch.ones_like(pred_fake_G))
             
-            # Content Loss (L1 or Cross-Entropy)
             loss_G_Content = criterionContent(fake_out, target)
             if mode == 'regression':
                 loss_G_Content *= lambda_l1
@@ -121,33 +122,44 @@ def train_gan_loop(
             
             total_loss_G += loss_G.item()
 
-        # 5. Validation & Visualization
-        if (epoch + 1) == num_epochs:
-            netG.eval()
-            val_psnr = 0
-            with torch.no_grad():
-                for L_v, target_v in val_loader:
-                    L_v = L_v.to(device).float()
-                    out_v = netG(L_v).float()
-                    
-                    if mode == 'classification':
-                        # Pred bins to AB
-                        pred_bins = torch.argmax(out_v, 1).cpu().numpy()
-                        pred_ab = ds_obj.bin_to_ab(pred_bins)
-                        # Target bins to AB
-                        true_ab = ds_obj.bin_to_ab(target_v.numpy())
-                    else:
-                        pred_ab = out_v.cpu().numpy().transpose(0, 2, 3, 1)
-                        true_ab = target_v.cpu().numpy().transpose(0, 2, 3, 1)
-                    
-                    for i in range(len(L_v)): 
-                        # Use data_range=2.0 because AB is roughly [-1, 1]
-                        val_psnr += psnr(true_ab[i], pred_ab[i], data_range=2.0)
-            
-            avg_psnr = val_psnr / len(val_ds)
-            print(f"Completed {num_epochs} Epochs. Final LossG: {total_loss_G/len(train_loader):.4f}, Final Validation PSNR: {avg_psnr:.2f}")
+        # 5. Validation
+        netG.eval()
+        val_psnr = 0
+        with torch.no_grad():
+            for L_v, target_v in val_loader:
+                L_v = L_v.to(device).float()
+                out_v = netG(L_v).float()
+                if mode == 'classification':
+                    pred_ab = ds_obj.bin_to_ab(torch.argmax(out_v, 1).cpu().numpy())
+                    true_ab = ds_obj.bin_to_ab(target_v.numpy())
+                else:
+                    pred_ab = out_v.cpu().numpy().transpose(0, 2, 3, 1)
+                    true_ab = target_v.cpu().numpy().transpose(0, 2, 3, 1)
+                for i in range(len(L_v)): 
+                    val_psnr += psnr(true_ab[i], pred_ab[i], data_range=2.0)
+        
+        avg_psnr = val_psnr / len(val_ds)
+        avg_loss_G = total_loss_G / len(train_loader)
+        history['loss_G'].append(avg_loss_G)
+        history['psnr'].append(avg_psnr)
+        
+        print(f"Epoch {epoch+1}/{num_epochs} | LossG: {avg_loss_G:.4f} | PSNR: {avg_psnr:.2f}")
+
+        # --- SAVE CHECKPOINT ---
+        torch.save({
+            'epoch': epoch,
+            'netG_state_dict': netG.state_dict(),
+            'netD_state_dict': netD.state_dict(),
+            'optG_state_dict': optG.state_dict(),
+            'optD_state_dict': optD.state_dict(),
+            'history': history,
+        }, checkpoint_path)
+
+        if (epoch + 1) % 5 == 0 or (epoch + 1) == num_epochs:
             visualize_results(L, fake_out, target, mode, ds_obj, device)
-        else:
-            print(f"Epoch {epoch+1}/{num_epochs} completed | LossG: {total_loss_G/len(train_loader):.4f}", end='\r')
             
-    return netG, netD
+    # Save final model
+    torch.save(netG.state_dict(), f'models/netG_{mode}_final.pth')
+    print(f"Final model saved to models/netG_{mode}_final.pth")
+            
+    return netG, netD, history

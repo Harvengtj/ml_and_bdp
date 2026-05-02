@@ -3,9 +3,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+def init_weights(m):
+    """Initialises weights with a Gaussian distribution (mean=0.0, std=0.02) as per Pix2Pix/GAN standards."""
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find('BatchNorm2d') != -1:
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.constant_(m.bias.data, 0.0)
+
 class Generator(nn.Module):
     """
-    U-Net Generator for Image Colorization.
+    U-Net Generator for Image Colourisation.
     Supports both regression (2 channels: a, b) and classification (N channels: colour bins).
     """
     def __init__(self, input_nc=1, output_nc=2, image_size=256, ngf=64, use_classification=False, num_bins=100):
@@ -26,6 +35,9 @@ class Generator(nn.Module):
         
         # Outer-most layer determines the final output shape and activation
         self.model = UnetSkipConnectionBlock(final_output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, use_classification=use_classification)
+
+        # Apply initialisation
+        self.apply(init_weights)
 
     def forward(self, x):
         return self.model(x)
@@ -92,6 +104,9 @@ class Discriminator(nn.Module):
         self.bn2 = nn.BatchNorm2d(128)
         self.bn3 = nn.BatchNorm2d(256)
         self.bn4 = nn.BatchNorm2d(512)
+
+        # Apply initialisation
+        self.apply(init_weights)
 
     def forward(self, x):
         x = F.leaky_relu(self.conv1(x), 0.2)

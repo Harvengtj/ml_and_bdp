@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from PIL import Image
 from skimage.color import rgb2lab, lab2rgb
 
-class ColoredDataset(Dataset):
+class ColouredDataset(Dataset):
     """Dataset for simple RGB loading."""
     def __init__(self, img_dir, transform=None):
         self.img_dir = img_dir
@@ -45,8 +45,8 @@ class LabColorDataset(Dataset):
 
     def bin_to_ab(self, bin_idx):
         """Converts class indices back to continuous ab values [-1, 1]."""
-        a = ((bin_idx // self.grid_size) / self.grid_size) * 2.0 - 1.0 + (1.0 / self.grid_size)
-        b = ((bin_idx % self.grid_size) / self.grid_size) * 2.0 - 1.0 + (1.0 / self.grid_size)
+        a = ((bin_idx // self.grid_size) / self.grid_size) * 2.0 - 1.0 + (1.0 / grid_size)
+        b = ((bin_idx % self.grid_size) / self.grid_size) * 2.0 - 1.0 + (1.0 / grid_size)
         return np.stack([a, b], axis=-1)
 
     def __getitem__(self, idx):
