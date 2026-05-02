@@ -232,85 +232,46 @@ Optional work if time allows:
 
 ## Proposed Task Split Per Person
 
-This split avoids having three people edit the same training code at the same time. Each person owns a coherent part of the project, but everyone should still understand the full pipeline for the oral defense.
+This split is only a coordination aid. Each person owns one area, but decisions should still come from the current code, results, and report needs.
 
 ### Person 1 - Data, Preprocessing, and Evaluation
 
-Main responsibility:
+Own the data path from raw images to usable training/evaluation batches.
 
-- own the BSDS500 dataset setup
-- preserve train, validation, and test splits
-- implement image loading
-- implement RGB-to-Lab conversion
-- extract and normalize `L` and `ab`
-- implement Lab-to-RGB reconstruction for visualization
-- create preprocessing sanity-check figures
-- implement evaluation metrics such as `ab` MAE, PSNR, SSIM, and mean chroma
-- create final qualitative comparison grids
+Focus:
 
-Expected deliverables:
-
-- clean dataset loader
-- preprocessing validation figures
-- evaluation script
-- final result grids and metric tables
-- report text for the Data and Evaluation sections
+- dataset loading and Lab conversion
+- sanity-check reconstruction figures
+- metrics and qualitative result grids
+- report material for data and evaluation
 
 ### Person 2 - Generator, Discriminator, and Training Code
 
-Main responsibility:
+Own the model and training path from tensors to trained outputs.
 
-- implement the U-Net generator
-- verify input shape `[B, 1, H, W]`
-- verify output shape `[B, 2, H, W]`
-- implement the conditional discriminator
-- decide whether to use a single-output discriminator or PatchGAN-style discriminator
-- implement reconstruction loss
-- implement adversarial loss
-- implement generator and discriminator optimizers
-- implement one-batch debug training
-- implement the full GAN training loop
-- save checkpoints, losses, and generated samples
+Focus:
 
-Expected deliverables:
-
-- generator module
-- discriminator module
-- loss functions
-- training script
-- saved checkpoints and sample outputs
-- report text for the Method and Training sections
+- U-Net generator and conditional discriminator
+- reconstruction and adversarial losses
+- debug training, full training, checkpoints, and samples
+- report material for method and training
 
 ### Person 3 - Literature, Experiments, Report, and Presentation
 
-Main responsibility:
+Own the explanation path from papers and runs to report and presentation.
 
-- summarize the GAN paper as the main implementation reference
-- summarize Colorful Image Colorization as background for multimodality, regression, classification, and rebalancing
-- summarize Deep Colorization section III.C as optional clustering context
-- maintain the experiment log
-- compare results across training settings
-- collect failure cases
-- write the Related Work, Experiments, Limitations, and Conclusion sections
-- prepare the presentation structure
-- prepare Q&A answers for the oral defense
+Focus:
 
-Expected deliverables:
-
-- related-work notes
-- experiment log
-- final report draft coordination
-- presentation slides
-- Q&A preparation notes
+- related work and paper positioning
+- experiment log, result comparison, and failure cases
+- report coordination
+- presentation and oral-defense preparation
 
 ### Shared Responsibilities
 
-- everyone reads the two main papers and Deep Colorization section III.C
-- everyone understands CIE Lab color space
-- everyone understands the generator-discriminator training loop
-- everyone can explain why colorization is ambiguous
-- everyone reviews final figures and report claims
-- everyone rehearses the oral defense
+- understand the full `L -> ab -> RGB` pipeline
+- understand the generator/discriminator training loop
+- review final results, claims, and presentation story
 
 ## External References
 
@@ -318,92 +279,13 @@ Expected deliverables:
 - Colorful Image Colorization reference: <https://github.com/richzhang/colorization?tab=readme-ov-file>
 - IEEE final report templates: <https://www.ieee.org/conferences/publishing/templates>
 
-## README Checklist
+## Checklist
 
-- [ ] Phase 1 - Project Scope and Alignment
-  - [ ] 1.1 - Confirm the GAN-first direction
-  - [ ] 1.2 - Define the task as conditional grayscale-to-color generation
-  - [ ] 1.3 - Use CIE Lab with `L` input and `ab` output
-  - [ ] 1.4 - Keep regression and classification papers as background references
-  - [ ] 1.5 - Define success criteria for implementation, evaluation, and report
-
-- [ ] Phase 2 - Literature Review
-  - [ ] 2.1 - Study the GAN colorization paper
-  - [ ] 2.2 - Extract the U-Net, discriminator, and loss ideas
-  - [ ] 2.3 - Study Colorful Image Colorization for multimodality and classification context
-  - [ ] 2.4 - Study Deep Colorization section III.C for optional clustering
-  - [ ] 2.5 - Write the related-work summary
-
-- [ ] Phase 3 - Repository and Environment Setup
-  - [ ] 3.1 - Define the source-code structure
-  - [ ] 3.2 - Confirm the Python environment
-  - [ ] 3.3 - Install required packages
-  - [ ] 3.4 - Define configs, checkpoints, figures, and result folders
-
-- [ ] Phase 4 - Dataset and Preprocessing
-  - [ ] 4.1 - Download and document BSDS500
-  - [ ] 4.2 - Preserve train, validation, and test splits
-  - [ ] 4.3 - Implement image loading and RGB-to-Lab conversion
-  - [ ] 4.4 - Extract and normalize `L` and `ab`
-  - [ ] 4.5 - Create preprocessing sanity-check figures
-
-- [ ] Phase 5 - Generator Implementation
-  - [ ] 5.1 - Implement the U-Net-style generator
-  - [ ] 5.2 - Use one input channel for `L`
-  - [ ] 5.3 - Use two output channels for `ab`
-  - [ ] 5.4 - Add skip connections
-  - [ ] 5.5 - Test generator shapes
-
-- [ ] Phase 6 - Discriminator Implementation
-  - [ ] 6.1 - Concatenate `L,ab` pairs
-  - [ ] 6.2 - Implement the convolutional discriminator
-  - [ ] 6.3 - Decide on single-output or PatchGAN output
-  - [ ] 6.4 - Test discriminator shapes and loss compatibility
-
-- [ ] Phase 7 - Losses and Optimizers
-  - [ ] 7.1 - Implement reconstruction loss
-  - [ ] 7.2 - Implement adversarial loss
-  - [ ] 7.3 - Combine generator losses
-  - [ ] 7.4 - Create Adam optimizers
-  - [ ] 7.5 - Choose initial learning rates and loss weights
-
-- [ ] Phase 8 - Training Pipeline
-  - [ ] 8.1 - Run one-batch debug training
-  - [ ] 8.2 - Implement discriminator update
-  - [ ] 8.3 - Implement generator update
-  - [ ] 8.4 - Implement full training loop
-  - [ ] 8.5 - Save checkpoints, losses, and samples
-  - [ ] 8.6 - Scale up only after the small-resolution pipeline works
-
-- [ ] Phase 9 - Evaluation and Visualization
-  - [ ] 9.1 - Generate input, ground-truth, and output grids
-  - [ ] 9.2 - Compute quantitative metrics
-  - [ ] 9.3 - Track loss curves
-  - [ ] 9.4 - Compare results across settings
-  - [ ] 9.5 - Analyze failure cases
-
-- [ ] Phase 10 - Optional Extensions
-  - [ ] 10.1 - Try an L1-only U-Net baseline
-  - [ ] 10.2 - Try adaptive clustering
-  - [ ] 10.3 - Try a small ImageNet subset
-  - [ ] 10.4 - Try higher-resolution training
-
-- [ ] Phase 11 - Report
-  - [ ] 11.1 - Write dataset and preprocessing section
-  - [ ] 11.2 - Write method section
-  - [ ] 11.3 - Write experiments and evaluation section
-  - [ ] 11.4 - Write related-work section
-  - [ ] 11.5 - Write limitations and conclusion
-
-- [ ] Phase 12 - Presentation
-  - [ ] 12.1 - Prepare problem and Lab color space slides
-  - [ ] 12.2 - Prepare GAN architecture and objective slides
-  - [ ] 12.3 - Prepare result and limitation slides
-  - [ ] 12.4 - Prepare Q&A answers
-
-- [ ] Phase 13 - Packaging and Submission
-  - [ ] 13.1 - Finalize README
-  - [ ] 13.2 - Clean unused debug files
-  - [ ] 13.3 - Verify clean setup execution
-  - [ ] 13.4 - Verify final report, slides, code, and group information
-  - [ ] 13.5 - Submit before the deadline
+- [ ] Agree on the minimal GAN pipeline and dataset subset.
+- [ ] Get preprocessing working: `RGB -> Lab -> L, ab -> RGB`.
+- [ ] Train a tiny end-to-end version: dataset, generator, discriminator, losses.
+- [ ] Save result grids and basic metrics for at least one run.
+- [ ] Compare what worked, what failed, and what to try next.
+- [ ] Write the report around the actual implementation and results.
+- [ ] Prepare presentation slides with problem, method, results, and limitations.
+- [ ] Package the final code, report, slides, and submission material.
