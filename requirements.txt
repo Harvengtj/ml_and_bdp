@@ -1,16 +1,16 @@
 # --- Deep Learning ---
-torch==2.11.0
-torchvision==0.26.0
-numpy==2.4.4
+torch
+torchvision
+numpy
 
 # --- Image Processing & Visualization ---
-Pillow==12.2.0
-matplotlib==3.10.9
-scikit-image==0.26.0
+Pillow
+matplotlib
+scikit-image
 
 # --- Data & Utilities ---
-requests==2.33.1
-tqdm==4.67.3
+requests
+tqdm
 
 # --- Jupyter (Optional but used for notebook) ---
-ipykernel==7.2.0
+ipykernel

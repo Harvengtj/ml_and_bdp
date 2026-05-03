@@ -5,21 +5,6 @@ from torch.utils.data import Dataset
 from PIL import Image
 from skimage.color import rgb2lab, lab2rgb
 
-class ColouredDataset(Dataset):
-    """Dataset for simple RGB loading."""
-    def __init__(self, img_dir, transform=None):
-        self.img_dir = img_dir
-        self.transform = transform
-        self.images = sorted(os.listdir(img_dir))
-    def __len__(self):
-        return len(self.images)
-    def __getitem__(self, idx):
-        img_path = os.path.join(self.img_dir, self.images[idx])
-        image = Image.open(img_path).convert("RGB")
-        if self.transform:
-            image = self.transform(image)
-        return image
-
 class LabColorDataset(Dataset):
     """
     Dataset that returns images in CIE LAB colour space.
@@ -45,8 +30,8 @@ class LabColorDataset(Dataset):
 
     def bin_to_ab(self, bin_idx):
         """Converts class indices back to continuous ab values [-1, 1]."""
-        a = ((bin_idx // self.grid_size) / self.grid_size) * 2.0 - 1.0 + (1.0 / grid_size)
-        b = ((bin_idx % self.grid_size) / self.grid_size) * 2.0 - 1.0 + (1.0 / grid_size)
+        a = ((bin_idx // self.grid_size) / self.grid_size) * 2.0 - 1.0 + (1.0 / self.grid_size)
+        b = ((bin_idx % self.grid_size) / self.grid_size) * 2.0 - 1.0 + (1.0 / self.grid_size)
         return np.stack([a, b], axis=-1)
 
     def __getitem__(self, idx):
@@ -63,21 +48,23 @@ class LabColorDataset(Dataset):
         ab = img_lab[:, :, 1:] / 128.0
         
         L_tensor = torch.from_numpy(L).unsqueeze(0).float()
+        ab_tensor = torch.from_numpy(ab.transpose(2, 0, 1)).float()
         
         if self.mode == 'classification':
             bins = self.ab_to_bin(ab)
-            return L_tensor, torch.from_numpy(bins).long()
+            # Return L, bins, and ab to avoid re-calculating ab from bins on CPU during training
+            return L_tensor, torch.from_numpy(bins).long(), ab_tensor
         else:
-            ab_tensor = torch.from_numpy(ab.transpose(2, 0, 1)).float()
             return L_tensor, ab_tensor
 
-def get_class_weights(dataset, num_bins=100):
+def get_class_weights(dataset, num_bins=100, sample_size=500):
     """Calculates inverse frequency weights for class rebalancing."""
     counts = np.zeros(num_bins)
-    print("Calculating class weights for rebalancing...")
+    print(f"Calculating class weights for rebalancing (sampling {sample_size} images)...")
     # Sample subset for speed
-    for i in range(min(len(dataset), 500)):
-        _, bins = dataset[i]
+    for i in range(min(len(dataset), sample_size)):
+        data = dataset[i]
+        bins = data[1] # bins is the second element in classification mode
         unique, bin_counts = np.unique(bins.numpy(), return_counts=True)
         counts[unique] += bin_counts
     counts += 1 # Avoid division by zero

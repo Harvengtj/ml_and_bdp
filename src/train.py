@@ -16,6 +16,7 @@ def train_gan_loop(
     device,
     mode='regression', 
     use_rebalancing=False, 
+    # Hyperparameters (can be passed via **config from the notebook)
     max_samples=1000,
     batch_size=4,
     num_epochs=10,
@@ -24,7 +25,8 @@ def train_gan_loop(
     lambda_l1=100,
     num_bins=100,
     image_size=256,
-    resume=True # New option to resume training
+    resume=True,
+    num_workers=4
 ):
     """
     Unified GAN training loop with checkpoint support for multi-day training.
@@ -40,8 +42,9 @@ def train_gan_loop(
         train_ds = Subset(train_ds, range(min(max_samples, len(train_ds))))
         val_ds = Subset(val_ds, range(min(max_samples // 5, len(val_ds))))
     
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    # Enable multi-processing and memory pinning for speed
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
     ds_obj = train_ds.dataset if isinstance(train_ds, Subset) else train_ds
 
     # 2. Models
@@ -65,7 +68,6 @@ def train_gan_loop(
     # --- RESUME TRAINING ---
     if resume and os.path.exists(checkpoint_path):
         print(f"Loading checkpoint: {checkpoint_path}")
-        # weights_only=False is required as the checkpoint contains history (dictionary/lists)
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         netG.load_state_dict(checkpoint['netG_state_dict'])
         netD.load_state_dict(checkpoint['netD_state_dict'])
@@ -84,17 +86,17 @@ def train_gan_loop(
         netD.train()
         total_loss_G = 0
         
-        for L, target in train_loader:
-            L, target = L.to(device).float(), target.to(device)
-            if mode == 'regression': target = target.float()
+        for data in train_loader:
+            if mode == 'classification':
+                L, target, real_ab = [x.to(device) for x in data]
+                L = L.float()
+            else:
+                L, target = [x.to(device) for x in data]
+                L, target = L.float(), target.float()
+                real_ab = target
             
             # --- Update Discriminator ---
             optD.zero_grad()
-            if mode == 'regression':
-                real_ab = target
-            else:
-                real_ab = torch.from_numpy(ds_obj.bin_to_ab(target.cpu().numpy())).permute(0, 3, 1, 2).to(device).float()
-            
             pred_real = netD(torch.cat([L, real_ab], 1))
             loss_D_real = criterionGAN(pred_real, torch.ones_like(pred_real))
             
@@ -122,12 +124,18 @@ def train_gan_loop(
             
             total_loss_G += loss_G.item()
 
-        # 5. Validation
+        # 5. Validation (Faster: limit to 200 samples)
         netG.eval()
         val_psnr = 0
+        samples_count = 0
+        max_val_samples = 200
         with torch.no_grad():
-            for L_v, target_v in val_loader:
-                L_v = L_v.to(device).float()
+            for data_v in val_loader:
+                if samples_count >= max_val_samples: break
+                
+                L_v = data_v[0].to(device).float()
+                target_v = data_v[1]
+                
                 out_v = netG(L_v).float()
                 if mode == 'classification':
                     pred_ab = ds_obj.bin_to_ab(torch.argmax(out_v, 1).cpu().numpy())
@@ -135,10 +143,13 @@ def train_gan_loop(
                 else:
                     pred_ab = out_v.cpu().numpy().transpose(0, 2, 3, 1)
                     true_ab = target_v.cpu().numpy().transpose(0, 2, 3, 1)
+                
                 for i in range(len(L_v)): 
+                    if samples_count >= max_val_samples: break
                     val_psnr += psnr(true_ab[i], pred_ab[i], data_range=2.0)
+                    samples_count += 1
         
-        avg_psnr = val_psnr / len(val_ds)
+        avg_psnr = val_psnr / samples_count if samples_count > 0 else 0
         avg_loss_G = total_loss_G / len(train_loader)
         history['loss_G'].append(avg_loss_G)
         history['psnr'].append(avg_psnr)
@@ -156,6 +167,7 @@ def train_gan_loop(
         }, checkpoint_path)
 
         if (epoch + 1) % 5 == 0 or (epoch + 1) == num_epochs:
+            # For visualization, we use the last batch from training loop
             visualize_results(L, fake_out, target, mode, ds_obj, device)
             
     # Save final model
