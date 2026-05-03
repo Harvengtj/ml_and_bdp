@@ -8,7 +8,7 @@ Based on the architectural and structural audits of the codebase (`ml_and_bdp/sr
 - [ ] **Fix Discriminator Output Shape (PatchGAN Bug):** Because of the 64x64 input and mismatched padding, the discriminator outputs a `[B, 1, 5, 5]` (in `main.py`) or `[B, 1, 6, 6]` (in `main.ipynb`) grid. Re-evaluate the strides and padding so it outputs the intended spatial grid size for the chosen input resolution.
 - [ ] **Resolve Codebase Inconsistencies:** `main.py` and `main.ipynb` have conflicting architectures (e.g., 5 encoder layers with stride 1 start in `main.py` vs. 4 encoder layers with stride 2 start in `main.ipynb`; differing paddings resulting in different output grids). Unify the implementations.
 
-## 🟠 MODERATE (Deviations from paper altering data flow)
+## 🟠 MODERATE (Deviations from paper alteringipydata flow)
 
 - [ ] **Correct Generator Output Channels:** The paper specifies the generator should output a full 3-channel image (L*a*b*). The current code outputs `output_channels=2` (only `a` and `b`). Decide whether to strictly follow the paper or intentionally keep this optimized approach (and document the deviation).
 - [ ] **Correct Discriminator Input Channels:** As a consequence of the generator output, the discriminator is currently receiving 3 channels (L + ab). The paper specifies a 4-channel input (grayscale condition + full colored image). 
@@ -19,3 +19,4 @@ Based on the architectural and structural audits of the codebase (`ml_and_bdp/sr
 - [ ] **Remove First Layer Batch Normalization:** The paper explicitly notes that Batch-Norm should *not* be applied to the first layer of the generator. The code currently applies `bn0` after `conv0`.
 - [ ] **Verify Discriminator Strides:** The paper states a series of stride 2 convolutions for the discriminator. The code changes to stride 1 towards the end. Verify if this was an intentional adaptation to preserve the PatchGAN spatial grid on small inputs.
 - [ ] **Document Sigmoid / BCEWithLogitsLoss Choice:** The paper specifies a final `sigmoid` layer for the discriminator. The code omits this layer structurally and uses `nn.BCEWithLogitsLoss()`. While this is a PyTorch best practice for numerical stability, it should be documented as an intentional structural deviation.
+- [ ] **Fix Loss Plot Visualization Scaling:** In the training plots, the `G L1` loss appears as a flat line near zero. This is a visualization artifact because the raw L1 loss (e.g., ~0.08) is plotted on the same axis as the adversarial loss (~2.0), while the total loss correctly multiplies it by `lambda_l1=100`. Update the visualization to plot the *scaled* L1 loss (`lambda_l1 * G_l1`) so its curve is actually visible.
