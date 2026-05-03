@@ -1,4 +1,5 @@
-# %% Imports
+# %% [markdown]
+# ## Imports
 import os
 import glob
 import random
@@ -14,8 +15,9 @@ import torch.optim as optim                         # For optimization algorithm
 from torch.utils.data import Dataset, DataLoader    # For handling datasets and batching
 import torchvision                                  # Useful for image grids
 
-# %% Experiment settings
-data_root = "data"
+# %% [markdown]
+# ## Experiment settings
+data_root = "C:/Cloud/OneDrive - Université Libre de Bruxelles/1 - School/ULB/Master/MA2/2025-26 - Q2/ELEC-Y591 - Machine Learning And Big Data Processes/ELEC-Y591 - Project Workspace/data"
 image_size = 64
 batch_size = 8
 num_epochs = 10
@@ -24,9 +26,9 @@ lambda_l1 = 100.0           # L1 weight (pix2pix-style colorization)
 lr = 2e-4                   # Learning rate
 beta1 = 0.5                 # Adam beta1
 device = "cuda:0"           # Device to use for training
-data_root = r"data"
 
-# %% Lab Conversion Helpers
+# %% [markdown]
+# ## Lab Conversion Helpers
 def rgb_to_lab_transform(pil_img):
     """
     Transform function that converts a PIL RGB image into normalized L and ab tensors.
@@ -122,7 +124,8 @@ def show_rgb_image(rgb, title=None):
         plt.title(title)
     plt.show()
 
-# %% Build the Colorization Dataset
+# %% [markdown]
+# ## Build the Colorization Dataset
 class LabColorizationDataset(Dataset):
     """
     Generic wrapper for grayscale-to-color training.
@@ -149,8 +152,8 @@ class LabColorizationDataset(Dataset):
         (L, ab), _ = self.base_dataset[index]
         return L, ab
 
-
-# %% Create DataLoaders
+# %% [markdown]
+# ## Create DataLoaders
 train_transform = torchvision.transforms.Compose([
     torchvision.transforms.Resize((image_size, image_size)),
     # torchvision.transforms.RandomHorizontalFlip(p=0.5), # This increases the dataset without needing for more samples. I don't think we will need it for now anyways
@@ -212,7 +215,8 @@ print(L_batch.min().item(), L_batch.max().item())
 print(ab_batch.min().item(), ab_batch.max().item())
 
 
-# %% Inspect One Batch
+# %% [markdown]
+# ## Inspect One Batch
 
 def show_colorization_batch(L_batch, ab_batch, max_images=4, title="Batch"):
     """
@@ -250,8 +254,8 @@ def show_colorization_batch(L_batch, ab_batch, max_images=4, title="Batch"):
 L_batch, ab_batch = next(iter(trainloader))
 show_colorization_batch(L_batch, ab_batch, max_images=4, title="Training examples")
 
-
-# %% Build the U-Net Generator
+# %% [markdown]
+# ## Build the U-Net Generator
 class UNetGenerator(nn.Module):
     """
     U-Net generator written in the same explicit style as the labs.
@@ -339,8 +343,8 @@ with torch.no_grad():
 
 print(fake_ab.shape)
 
-
-# %% Build the Conditional Discriminator
+# %% [markdown]
+# ## Build the Conditional Discriminator
 class ConditionalDiscriminator(nn.Module):
     """
     Conditional convolutional discriminator written in the same explicit style as the labs.
@@ -391,8 +395,8 @@ with torch.no_grad():
 print(pair.shape)
 print(logits.shape)
 
-
-# %% Add Helpers
+# %% [markdown]
+# ## Add Helpers
 def count_parameters(model):
     """
     Count trainable parameters in a PyTorch model.
@@ -468,8 +472,8 @@ def visualize_predictions(generator, dataloader, device, max_images=4, title="Co
 
     generator.train()
 
-# %% Train Generator With L1 Only
-# Create generator.
+# %% [markdown]
+# ## Train Generator With L1 Only
 G = UNetGenerator(input_channels=1, output_channels=2).to(device)
 
 print(f"Generator parameters: {count_parameters(G):,}")
@@ -521,8 +525,8 @@ for epoch in range(warmup_epochs):
     print(f"Warm-up epoch {epoch + 1}/{warmup_epochs} | L1 loss: {train_loss:.4f}")
     visualize_predictions(G, valloader, device, max_images=4, title=f"Warm-up epoch {epoch + 1}")
 
-
-# %% Create Discriminator, Losses, Optimizers
+# %% [markdown]
+# ## Create Discriminator, Losses, Optimizers
 # Create discriminator.
 D = ConditionalDiscriminator(input_channels=3).to(device)
 
@@ -554,8 +558,8 @@ with torch.no_grad():
 print(real_logits.shape)
 print(fake_logits.shape)
 
-
-# %% Write One GAN Epoch
+# %% [markdown]
+# ## Write One GAN Epoch
 def train_gan_one_epoch(
     generator,
     discriminator,
@@ -664,7 +668,8 @@ def train_gan_one_epoch(
         "G_l1": running_G_l1 / n,
     }
 
-# %% Full Training Loop
+# %% [markdown]
+# ## Full Training Loop
 history = {
     "D": [],
     "G": [],
@@ -705,7 +710,8 @@ for epoch in range(num_epochs):
         title=f"GAN epoch {epoch + 1}",
     )
 
-# %% Plot GAN Losses
+# %% [markdown]
+# ## Plot GAN Losses
 def plot_gan_history(history):
     epochs = np.arange(1, len(history["D"]) + 1)
 
@@ -732,7 +738,8 @@ def plot_gan_history(history):
 plot_gan_history(history)
 
 
-# %% Save Checkpoints
+# %% [markdown]
+# ## Save Checkpoints
 checkpoint_dir = "./checkpoints_colorization"
 os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -741,7 +748,8 @@ torch.save(D.state_dict(), os.path.join(checkpoint_dir, "discriminator.pth"))
 
 print("Saved generator and discriminator.")
 
-# %% Load Checkpoints
+# %% [markdown]
+# ## Load Checkpoints
 G_loaded = UNetGenerator(input_channels=1, output_channels=2).to(device)
 G_loaded.load_state_dict(torch.load(os.path.join(checkpoint_dir, "generator.pth"), map_location=device))
 G_loaded.eval()
