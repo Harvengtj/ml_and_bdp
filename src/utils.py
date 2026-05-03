@@ -36,9 +36,15 @@ def visualize_results(L, fake_out, target, mode, ds_obj, device):
     L_np = L.detach().cpu().numpy().transpose(0, 2, 3, 1)
     
     if mode == 'classification':
-        fake_bins = torch.argmax(fake_out, dim=1).cpu().numpy()
-        fake_ab = ds_obj.bin_to_ab(fake_bins)
-        true_ab = ds_obj.bin_to_ab(target.cpu().numpy())
+        # Use soft-argmax for smoother color transitions
+        fake_ab_tensor = bins_to_ab_differentiable(fake_out, ds_obj, device)
+        fake_ab = fake_ab_tensor.detach().cpu().numpy().transpose(0, 2, 3, 1)
+        # target might be bins or ab depending on how it was passed, 
+        # but in training loop for visualization we use target which is bins if mode=='classification'
+        if target.ndim == 3: # bins
+            true_ab = ds_obj.bin_to_ab(target.cpu().numpy())
+        else: # ab tensor
+            true_ab = target.cpu().numpy().transpose(0, 2, 3, 1)
     else:
         fake_ab = fake_out.detach().cpu().numpy().transpose(0, 2, 3, 1)
         true_ab = target.cpu().numpy().transpose(0, 2, 3, 1)
@@ -86,16 +92,17 @@ def compare_colourisations(netG_reg, netG_cls, val_loader, ds_obj, device, num_s
     L_list, target_list, reg_list, cls_list = [], [], [], []
     
     with torch.no_grad():
-        for L, target in val_loader:
-            L = L.to(device).float()
+        for data in val_loader:
+            L = data[0].to(device).float()
+            target = data[1]
             
             # Regression prediction
             out_reg = netG_reg(L).detach().cpu().numpy().transpose(0, 2, 3, 1)
             
-            # Classification prediction
+            # Classification prediction - using soft-argmax for smoother results
             out_cls_logits = netG_cls(L)
-            out_cls_bins = torch.argmax(out_cls_logits, dim=1).cpu().numpy()
-            out_cls = ds_obj.bin_to_ab(out_cls_bins)
+            out_cls_tensor = bins_to_ab_differentiable(out_cls_logits, ds_obj, device)
+            out_cls = out_cls_tensor.cpu().numpy().transpose(0, 2, 3, 1)
             
             # Handle target shape for both modes
             L_np = L.cpu().numpy().transpose(0, 2, 3, 1)

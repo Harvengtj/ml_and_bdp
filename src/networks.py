@@ -24,7 +24,9 @@ class Generator(nn.Module):
         # Final output channels depend on the mode (regression vs classification)
         final_output_nc = num_bins if use_classification else output_nc
         
-        num_downs = int(math.log2(image_size))
+        # Fixed depth to allow training on 128 and testing on 256 without changing model structure
+        num_downs = 7 
+        
         # Build U-Net structure with skip connections
         unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None, innermost=True)
         for _ in range(num_downs - 5):
@@ -45,8 +47,6 @@ class Generator(nn.Module):
 class UnetSkipConnectionBlock(nn.Module):
     """
     Defines a U-Net submodule with skip connection.
-    X ------------------- (layer) ------------------- +
-      |-- downsampling -- [submodule] -- upsampling --|
     """
     def __init__(self, outer_nc, inner_nc, input_nc=None,
                  submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False, use_classification=False):
@@ -92,7 +92,6 @@ class Discriminator(nn.Module):
     """
     PatchGAN Discriminator.
     Classifies small patches of the image as real or fake.
-    Input NC usually 3 (L + ab).
     """
     def __init__(self, input_nc=3):
         super().__init__()

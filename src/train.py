@@ -16,7 +16,6 @@ def train_gan_loop(
     device,
     mode='regression', 
     use_rebalancing=False, 
-    # Hyperparameters (can be passed via **config from the notebook)
     max_samples=1000,
     batch_size=4,
     num_epochs=10,
@@ -124,7 +123,7 @@ def train_gan_loop(
             
             total_loss_G += loss_G.item()
 
-        # 5. Validation (Faster: limit to 200 samples)
+        # 5. Validation
         netG.eval()
         val_psnr = 0
         samples_count = 0
@@ -138,8 +137,10 @@ def train_gan_loop(
                 
                 out_v = netG(L_v).float()
                 if mode == 'classification':
-                    pred_ab = ds_obj.bin_to_ab(torch.argmax(out_v, 1).cpu().numpy())
-                    true_ab = ds_obj.bin_to_ab(target_v.numpy())
+                    # Use soft-argmax for smoother validation metrics and results
+                    pred_ab_tensor = bins_to_ab_differentiable(out_v, ds_obj, device)
+                    pred_ab = pred_ab_tensor.cpu().numpy().transpose(0, 2, 3, 1)
+                    true_ab = target_v.cpu().numpy().transpose(0, 2, 3, 1)
                 else:
                     pred_ab = out_v.cpu().numpy().transpose(0, 2, 3, 1)
                     true_ab = target_v.cpu().numpy().transpose(0, 2, 3, 1)
