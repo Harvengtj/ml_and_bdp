@@ -19,7 +19,7 @@ import torchvision                                  # Useful for image grids
 # ## Experiment settings
 data_root = "C:/Cloud/OneDrive - Université Libre de Bruxelles/1 - School/ULB/Master/MA2/2025-26 - Q2/ELEC-Y591 - Machine Learning And Big Data Processes/ELEC-Y591 - Project Workspace/data"
 image_size = 32
-batch_size = 8
+batch_size = 10
 num_epochs = 10
 warmup_epochs = 2           # Generator warm-up epochs (L1 only before adversarial training)
 lambda_l1 = 100.0           # L1 weight (pix2pix-style colorization)
@@ -27,6 +27,8 @@ lr = 2e-4                   # Learning rate
 beta1 = 0.5                 # Adam beta1
 device = "cuda:0"           # Device to use for training
 seed = 42
+num_workers = 2
+pin_memory = str(device).startswith("cuda") and torch.cuda.is_available()
 
 # %% [markdown]
 # ## Lab Conversion Helpers
@@ -188,14 +190,16 @@ trainloader = DataLoader(
     trainset,
     batch_size=batch_size,
     shuffle=True,
-    # num_workers=0,            # TODO Not use in the lab, I will have to check the usefullness of this
+    num_workers=num_workers,  # TODO Not use in the lab, I will have to check the usefullness of this
+    pin_memory=pin_memory,
 )
 
 valloader = DataLoader(
     valset,
     batch_size=batch_size,
     shuffle=False,
-    # num_workers=0,
+    num_workers=num_workers,
+    pin_memory=pin_memory,
 )
 
 print(f"Training images: {len(trainset)}")

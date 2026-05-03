@@ -2,6 +2,7 @@
 # ## Imports
 import os
 import random
+import importlib
 from zipfile import Path
 import numpy as np                                  # For numerical operations
 import matplotlib.pyplot as plt                     # For plotting
@@ -13,6 +14,12 @@ import torch.nn.functional as F                     # For activation functions a
 import torch.optim as optim                         # For optimization algorithms
 from torch.utils.data import Dataset, DataLoader, random_split    # For handling datasets and batching
 import torchvision                                  # Useful for image grids
+
+try:
+    tqdm = importlib.import_module("tqdm.auto").tqdm
+except ModuleNotFoundError:
+    def tqdm(iterable, *args, **kwargs):
+        return iterable
 
 # %% [markdown]
 # ## Experiment settings
@@ -26,6 +33,8 @@ lr = 2e-4                   # Learning rate
 beta1 = 0.5                 # Adam beta1
 device = "cuda:0"           # Device to use for training
 seed = 42
+num_workers = 0            
+pin_memory = str(device).startswith("cuda") and torch.cuda.is_available()
 
 # %% [markdown]
 # ## Lab Conversion Helpers
@@ -189,18 +198,21 @@ trainloader = DataLoader(
     trainset,
     batch_size=batch_size,
     shuffle=True,
-    # num_workers=0,            # TODO Not use in the lab, I will have to check the usefullness of this
+    num_workers=num_workers,
+    pin_memory=pin_memory,
 )
 
 valloader = DataLoader(
     valset,
     batch_size=batch_size,
     shuffle=False,
-    # num_workers=0,
+    num_workers=num_workers,
+    pin_memory=pin_memory,
 )
 
 print(f"Training images: {len(trainset)}")
 print(f"Validation images: {len(valset)}")
+print(f"DataLoader workers: {num_workers}")
 print(f"Device: {device}")
 
 L_batch, lab_batch = next(iter(trainloader))
@@ -476,16 +488,16 @@ criterion_l1 = nn.L1Loss()
 optimizer_G = optim.Adam(G.parameters(), lr=lr, betas=(beta1, 0.999))
 
 
-def train_generator_l1_one_epoch(generator, dataloader, optimizer, criterion, device):
+def train_generator_l1_one_epoch(generator, dataloader, optimizer, criterion, device, desc="L1 warm-up"):
     """
     Train generator for one epoch using only L1 reconstruction loss.
     """
     generator.train()
     running_loss = 0.0
 
-    for L_batch, lab_batch in dataloader:
-        L_batch = L_batch.to(device)
-        lab_batch = lab_batch.to(device)
+    for L_batch, lab_batch in tqdm(dataloader, desc=desc, total=len(dataloader)):
+        L_batch = L_batch.to(device, non_blocking=pin_memory)
+        lab_batch = lab_batch.to(device, non_blocking=pin_memory)
 
         # Forward pass: predict color channels from L.
         fake_lab = generator(L_batch)
@@ -511,6 +523,7 @@ for epoch in range(warmup_epochs):
         optimizer=optimizer_G,
         criterion=criterion_l1,
         device=device,
+        desc=f"Warm-up {epoch + 1}/{warmup_epochs}",
     )
 
     print(f"Warm-up epoch {epoch + 1}/{warmup_epochs} | L1 loss: {train_loss:.4f}")
@@ -562,6 +575,7 @@ def train_gan_one_epoch(
     lambda_l1,
     device,
     real_label_value=0.9,
+    desc="GAN train",
 ):
     """
     Train GAN for one epoch.
@@ -577,9 +591,9 @@ def train_gan_one_epoch(
     running_G_gan = 0.0
     running_G_l1 = 0.0
 
-    for L_batch, lab_batch in dataloader:
-        L_batch = L_batch.to(device)
-        lab_batch = lab_batch.to(device)
+    for L_batch, lab_batch in tqdm(dataloader, desc=desc, total=len(dataloader)):
+        L_batch = L_batch.to(device, non_blocking=pin_memory)
+        lab_batch = lab_batch.to(device, non_blocking=pin_memory)
 
         # ------------------------------------------------------------
         # 1. Train Discriminator
@@ -680,6 +694,7 @@ for epoch in range(num_epochs):
         lambda_l1=lambda_l1,
         device=device,
         real_label_value=0.9,
+        desc=f"GAN epoch {epoch + 1}/{num_epochs}",
     )
 
     for key in history:
