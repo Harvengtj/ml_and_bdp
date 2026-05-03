@@ -13,36 +13,27 @@ from torch.utils.data import Dataset, DataLoader    # For handling datasets and 
 import torchvision                                  # Useful for image grids
 
 # %% Experiment settings
-# Start small. GANs are much easier to debug at 64x64 than at 256x256.
 image_size = 64
-
-# Use a small batch size first. Increase only after shapes and losses work.
 batch_size = 8
-
-# First use a small number of epochs for debugging.
 num_epochs = 10
 
-# Generator warm-up epochs: train with L1 only before adversarial training.
+# Generator warm-up epochs (L1 only before adversarial training)
 warmup_epochs = 2
 
-# L1 weight from the paper and pix2pix-style colorization.
+# L1 weight (pix2pix-style colorization)
 lambda_l1 = 100.0
 
-# Learning rate. The paper uses 2e-4; the repo examples use 3e-4.
+# Learning rate
 lr = 2e-4
 
-# Adam beta1 from the paper/DCGAN convention.
+# Adam beta1
 beta1 = 0.5
 
-# Device selection, same idea as your labs.
 device = "cuda:0"
 
 # -----------------------------
 # Dataset settings
 # -----------------------------
-
-# Use CIFAR-10 as the first base dataset for experimentation.
-# torchvision will store or download it under this folder.
 data_root = "./data"
 
 # Reproducibility
@@ -89,7 +80,6 @@ class RGBToLabTransform:
 
         return L_tensor, ab_tensor
 
-# Define our transform pipeline
 transform = torchvision.transforms.Compose([
     torchvision.transforms.Resize((image_size, image_size), Image.BICUBIC),
     RGBToLabTransform()
