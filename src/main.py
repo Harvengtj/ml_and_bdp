@@ -147,9 +147,7 @@ class LabColorizationDataset(Dataset):
         (L, ab), _ = self.base_dataset[index]
         return L, ab
 
-# Define transforms in the same place/style as Lab 5.
-# Keep PIL image transforms before rgb_to_lab_transform.
-# rgb_to_lab_transform is the final transform because it returns tensors.
+# %% Transform and Dataset Definitions
 train_transform = torchvision.transforms.Compose([
     torchvision.transforms.Resize((image_size, image_size)),
     # torchvision.transforms.RandomHorizontalFlip(p=0.5), # This increases the dataset without needing for more samples. I don't think we will need it for now anyways
@@ -167,14 +165,14 @@ val_transform = torchvision.transforms.Compose([
 cifar_train_base = torchvision.datasets.CIFAR10(
     root=data_root,
     train=True,
-    download=True,
+    download=False,
     transform=train_transform,
 )
 
 cifar_val_base = torchvision.datasets.CIFAR10(
     root=data_root,
     train=False,
-    download=True,
+    download=False,
     transform=val_transform,
 )
 
@@ -191,16 +189,22 @@ trainloader = DataLoader(
     trainset,
     batch_size=batch_size,
     shuffle=True,
-    num_workers=0,
+    # num_workers=0,            # TODO Not use in the lab, I will have to check the usefullness of this
 )
 
 valloader = DataLoader(
     valset,
     batch_size=batch_size,
     shuffle=False,
-    num_workers=0,
+    # num_workers=0,
 )
 
 print(f"Training images: {len(trainset)}")
 print(f"Validation images: {len(valset)}")
 print(f"Device: {device}")
+
+L_batch, ab_batch = next(iter(trainloader))
+print(L_batch.shape)
+print(ab_batch.shape)
+print(L_batch.min().item(), L_batch.max().item())
+print(ab_batch.min().item(), ab_batch.max().item())
