@@ -4,15 +4,15 @@ Based on the architectural and structural audits of the codebase (`ml_and_bdp/sr
 
 ## 🔴 MAJOR (Breaks intended pipeline or results)
 
-- [ ] **Fix Input Resolution Mismatch:** The code actively resizes CIFAR-10 images to `64x64` despite documentation and network design expecting `32x32`. This fundamentally alters the bottleneck size (to `4x4` instead of `2x2`) and downstream tensor math. Ensure `image_size` is set to `32` or the network architecture is properly scaled for `64x64`.
-- [ ] **Fix Discriminator Output Shape (PatchGAN Bug):** Because of the 64x64 input and mismatched padding, the discriminator outputs a `[B, 1, 5, 5]` (in `main.py`) or `[B, 1, 6, 6]` (in `main.ipynb`) grid. Re-evaluate the strides and padding so it outputs the intended spatial grid size for the chosen input resolution.
-- [ ] **Resolve Codebase Inconsistencies:** `main.py` and `main.ipynb` have conflicting architectures (e.g., 5 encoder layers with stride 1 start in `main.py` vs. 4 encoder layers with stride 2 start in `main.ipynb`; differing paddings resulting in different output grids). Unify the implementations.
+- [x] **Fix Input Resolution Mismatch:** The code actively resizes CIFAR-10 images to `64x64` despite documentation and network design expecting `32x32`. This fundamentally alters the bottleneck size (to `4x4` instead of `2x2`) and downstream tensor math. Ensure `image_size` is set to `32` or the network architecture is properly scaled for `64x64`.
+- [x] **Fix Discriminator Output Shape (PatchGAN Bug):** Because of the 64x64 input and mismatched padding, the discriminator outputs a `[B, 1, 5, 5]` (in `main.py`) or `[B, 1, 6, 6]` (in `main.ipynb`) grid. Re-evaluate the strides and padding so it outputs the intended spatial grid size for the chosen input resolution.
+- [x] **Resolve Codebase Inconsistencies:** `main.py` and `main.ipynb` have conflicting architectures (e.g., 5 encoder layers with stride 1 start in `main.py` vs. 4 encoder layers with stride 2 start in `main.ipynb`; differing paddings resulting in different output grids). Unify the implementations.
 
-## 🟠 MODERATE (Deviations from paper alteringipydata flow)
+## 🟠 MODERATE (Deviations from paper altering data flow)
 
-- [ ] **Correct Generator Output Channels:** The paper specifies the generator should output a full 3-channel image (L*a*b*). The current code outputs `output_channels=2` (only `a` and `b`). Decide whether to strictly follow the paper or intentionally keep this optimized approach (and document the deviation).
-- [ ] **Correct Discriminator Input Channels:** As a consequence of the generator output, the discriminator is currently receiving 3 channels (L + ab). The paper specifies a 4-channel input (grayscale condition + full colored image). 
-- [ ] **Fix Generator First Layer Stride:** The paper specifies stride 2 for all contracting layers. The current implementation uses stride 1 for the first layer (`conv0`) to preserve resolution early on. 
+- [x] **Correct Generator Output Channels:** The paper specifies the generator should output a full 3-channel image (L*a*b*). The current code outputs `output_channels=2` (only `a` and `b`). Decide whether to strictly follow the paper or intentionally keep this optimized approach (and document the deviation).
+- [x] **Correct Discriminator Input Channels:** As a consequence of the generator output, the discriminator is currently receiving 3 channels (L + ab). The paper specifies a 4-channel input (grayscale condition + full colored image). 
+- [x] **Fix Generator First Layer Stride:** The paper specifies stride 2 for all contracting layers. The current implementation uses stride 1 for the first layer (`conv0`) to preserve resolution early on. 
 
 ## 🟡 MINOR (Small discrepancies or practical adaptations)
 
