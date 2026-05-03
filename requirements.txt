@@ -7,6 +7,8 @@ numpy
 Pillow
 matplotlib
 scikit-image
+seaborn
+scipy
 
 # --- Data & Utilities ---
 requests
@@ -14,3 +16,4 @@ tqdm
 
 # --- Jupyter (Optional but used for notebook) ---
 ipykernel
+ipywidgets
