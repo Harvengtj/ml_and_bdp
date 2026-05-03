@@ -1,7 +1,6 @@
 # %% [markdown]
 # ## Imports
 import os
-import glob
 import random
 from zipfile import Path
 import numpy as np                                  # For numerical operations
@@ -12,7 +11,7 @@ import torch
 import torch.nn as nn                               # For building neural networks
 import torch.nn.functional as F                     # For activation functions and other utilities
 import torch.optim as optim                         # For optimization algorithms
-from torch.utils.data import Dataset, DataLoader    # For handling datasets and batching
+from torch.utils.data import Dataset, DataLoader, random_split    # For handling datasets and batching
 import torchvision                                  # Useful for image grids
 
 # %% [markdown]
@@ -26,6 +25,7 @@ lambda_l1 = 100.0           # L1 weight (pix2pix-style colorization)
 lr = 2e-4                   # Learning rate
 beta1 = 0.5                 # Adam beta1
 device = "cuda:0"           # Device to use for training
+seed = 42
 
 # %% [markdown]
 # ## Lab Conversion Helpers
@@ -121,12 +121,12 @@ def show_rgb_image(rgb, title=None):
 # ## Build the Colorization Dataset
 class LabColorizationDataset(Dataset):
     """
-    Generic wrapper for grayscale-to-color training.
+    Generic wrapper for grayscale-to-color training from torchvision datasets.
 
     Many torchvision datasets return:
         image, class_label
 
-    The base CIFAR-10 dataset returns:
+    If a base dataset returns:
         (L, ab), class_label
 
     This wrapper ignores the class label and returns:
@@ -140,7 +140,7 @@ class LabColorizationDataset(Dataset):
         return len(self.base_dataset)
 
     def __getitem__(self, index):
-        # The base CIFAR-10 dataset returns ((L, ab), label) because of the transform.
+        # The base dataset returns ((L, lab), label) because of the transform.
         # Discard the label, we only need the images for colorization.
         (L, lab), _ = self.base_dataset[index]
         return L, lab
@@ -159,28 +159,30 @@ val_transform = torchvision.transforms.Compose([
 ])
 
 
-# Base datasets
-cifar_train_base = torchvision.datasets.CIFAR10(
+# Base dataset.
+# Use the smaller Places365 validation split for development.
+# split="train-standard" downloads the full training archive, which is much larger.
+places_base = torchvision.datasets.Places365(
     root=data_root,
-    train=True,
-    download=False,
+    split="val",
+    small=True,
+    download=True,
     transform=train_transform,
 )
 
-cifar_val_base = torchvision.datasets.CIFAR10(
-    root=data_root,
-    train=False,
-    download=False,
-    transform=val_transform,
+train_size = int(0.8 * len(places_base))
+val_size = len(places_base) - train_size
+
+places_train_base, places_val_base = random_split(
+    places_base,
+    [train_size, val_size],
+    generator=torch.Generator().manual_seed(seed),
 )
 
-# Wrapper to discard CIFAR-10 labels
-trainset = LabColorizationDataset(
-    base_dataset=cifar_train_base,
-)
-
+# Wrapper to discard Places365 labels.
+trainset = LabColorizationDataset(base_dataset=places_train_base)
 valset = LabColorizationDataset(
-    base_dataset=cifar_val_base,
+    base_dataset=places_val_base,
 )
 
 trainloader = DataLoader(

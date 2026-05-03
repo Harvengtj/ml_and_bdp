@@ -26,6 +26,7 @@ lambda_l1 = 100.0           # L1 weight (pix2pix-style colorization)
 lr = 2e-4                   # Learning rate
 beta1 = 0.5                 # Adam beta1
 device = "cuda:0"           # Device to use for training
+seed = 42
 
 # %% [markdown]
 # ## Lab Conversion Helpers
