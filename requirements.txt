@@ -1,10 +1,21 @@
-# --- Deep Learning ---
+# PyTorch CUDA 13.0 wheels.
+--index-url https://download.pytorch.org/whl/cu130
+--extra-index-url https://pypi.org/simple
+
+# Deep learning
 torch
 torchvision
-numpy
-scikit-learn
+torchaudio
 
-# --- Image & Viz ---
-Pillow
+# Numerical computing
+numpy
+
+# Plotting
 matplotlib
+
+# Image processing
+Pillow
 scikit-image
+
+# Useful for evaluation/experiments later in the project
+scikit-learn
