@@ -132,18 +132,23 @@ def train_gan_loop(
             for data_v in val_loader:
                 if samples_count >= max_val_samples: break
                 
-                L_v = data_v[0].to(device).float()
-                target_v = data_v[1]
+                if mode == 'classification':
+                    L_v, target_v, real_ab_v = [x.to(device) for x in data_v]
+                else:
+                    L_v, real_ab_v = [x.to(device) for x in data_v]
+                    target_v = real_ab_v
                 
+                L_v = L_v.float()
                 out_v = netG(L_v).float()
+                
                 if mode == 'classification':
                     # Use soft-argmax for smoother validation metrics and results
                     pred_ab_tensor = bins_to_ab_differentiable(out_v, ds_obj, device)
                     pred_ab = pred_ab_tensor.cpu().numpy().transpose(0, 2, 3, 1)
-                    true_ab = target_v.cpu().numpy().transpose(0, 2, 3, 1)
+                    true_ab = real_ab_v.cpu().numpy().transpose(0, 2, 3, 1)
                 else:
                     pred_ab = out_v.cpu().numpy().transpose(0, 2, 3, 1)
-                    true_ab = target_v.cpu().numpy().transpose(0, 2, 3, 1)
+                    true_ab = real_ab_v.cpu().numpy().transpose(0, 2, 3, 1)
                 
                 for i in range(len(L_v)): 
                     if samples_count >= max_val_samples: break
