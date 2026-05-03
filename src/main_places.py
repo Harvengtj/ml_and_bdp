@@ -201,7 +201,7 @@ print(f"Training images: {len(trainset)}")
 print(f"Validation images: {len(valset)}")
 print(f"Device: {device}")
 
-L_batch, llab_batch = next(iter(trainloader))
+L_batch, lab_batch = next(iter(trainloader))
 print(L_batch.shape)
 print(lab_batch.shape)
 print(L_batch.min().item(), L_batch.max().item())
@@ -211,14 +211,14 @@ print(lab_batch.min().item(), lab_batch.max().item())
 # %% [markdown]
 # ## Inspect One Batch
 
-def show_colorization_batch(L_batch, llab_batch, max_images=4, title="Batch"):
+def show_colorization_batch(L_batch, lab_batch, max_images=4, title="Batch"):
     """
     Show L grayscale inputs and RGB images reconstructed from real ab.
     """
     L_batch = L_batch[:max_images]
     lab_batch = lab_batch[:max_images]
 
-    rgb_batch = lab_tensors_to_rgb(L_batch, llab_batch)
+    rgb_batch = lab_tensors_to_rgb(L_batch, lab_batch)
 
     n = len(rgb_batch)
     fig, axes = plt.subplots(2, n, figsize=(3 * n, 6))
@@ -244,8 +244,8 @@ def show_colorization_batch(L_batch, llab_batch, max_images=4, title="Batch"):
     plt.show()
 
 
-L_batch, llab_batch = next(iter(trainloader))
-show_colorization_batch(L_batch, llab_batch, max_images=4, title="Training examples")
+L_batch, lab_batch = next(iter(trainloader))
+show_colorization_batch(L_batch, lab_batch, max_images=4, title="Training examples")
 
 # %% [markdown]
 # ## Build the U-Net Generator
@@ -328,7 +328,7 @@ class UNetGenerator(nn.Module):
 
 G = UNetGenerator(input_channels=1, output_channels=3).to(device)
 
-L_batch, llab_batch = next(iter(trainloader))
+L_batch, lab_batch = next(iter(trainloader))
 with torch.no_grad():
     fake_lab = G(L_batch.to(device))
 
@@ -375,8 +375,8 @@ class ConditionalDiscriminator(nn.Module):
 
 D = ConditionalDiscriminator(input_channels=4).to(device)
 
-L_batch, llab_batch = next(iter(trainloader))
-pair = torch.cat([L_batch, llab_batch], dim=1).to(device)
+L_batch, lab_batch = next(iter(trainloader))
+pair = torch.cat([L_batch, lab_batch], dim=1).to(device)
 
 with torch.no_grad():
     logits = D(pair)
@@ -423,14 +423,14 @@ def visualize_predictions(generator, dataloader, device, max_images=4, title="Co
     """
     generator.eval()
 
-    L_batch, llab_batch = next(iter(dataloader))
+    L_batch, lab_batch = next(iter(dataloader))
     L_batch = L_batch[:max_images].to(device)
     lab_batch = lab_batch[:max_images].to(device)
 
     with torch.no_grad():
         fake_lab = generator(L_batch)
 
-    real_rgb = lab_tensors_to_rgb(L_batch, llab_batch)
+    real_rgb = lab_tensors_to_rgb(L_batch, lab_batch)
     fake_rgb = lab_tensors_to_rgb(L_batch, fake_lab)
 
     n = L_batch.shape[0]
@@ -481,7 +481,7 @@ def train_generator_l1_one_epoch(generator, dataloader, optimizer, criterion, de
     generator.train()
     running_loss = 0.0
 
-    for L_batch, llab_batch in dataloader:
+    for L_batch, lab_batch in dataloader:
         L_batch = L_batch.to(device)
         lab_batch = lab_batch.to(device)
 
@@ -533,13 +533,13 @@ optimizer_G = optim.Adam(G.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizer_D = optim.Adam(D.parameters(), lr=lr, betas=(beta1, 0.999))
 
 
-L_batch, llab_batch = next(iter(trainloader))
+L_batch, lab_batch = next(iter(trainloader))
 L_batch = L_batch.to(device)
 lab_batch = lab_batch.to(device)
 
 with torch.no_grad():
     fake_lab = G(L_batch)
-    real_pair = torch.cat([L_batch, llab_batch], dim=1)
+    real_pair = torch.cat([L_batch, lab_batch], dim=1)
     fake_pair = torch.cat([L_batch, fake_lab], dim=1)
     real_logits = D(real_pair)
     fake_logits = D(fake_pair)
@@ -575,7 +575,7 @@ def train_gan_one_epoch(
     running_G_gan = 0.0
     running_G_l1 = 0.0
 
-    for L_batch, llab_batch in dataloader:
+    for L_batch, lab_batch in dataloader:
         L_batch = L_batch.to(device)
         lab_batch = lab_batch.to(device)
 
@@ -589,7 +589,7 @@ def train_gan_one_epoch(
         fake_lab = generator(L_batch)
 
         # Real pair: L + real ab.
-        real_pair = torch.cat([L_batch, llab_batch], dim=1)
+        real_pair = torch.cat([L_batch, lab_batch], dim=1)
 
         # Fake pair: L + generated ab.
         # detach() prevents gradients from updating G during D step.
