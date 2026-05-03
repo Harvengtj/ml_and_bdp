@@ -2,6 +2,7 @@
 import os
 import glob
 import random
+from zipfile import Path
 import numpy as np                                  # For numerical operations
 import matplotlib.pyplot as plt                     # For plotting
 from PIL import Image                               # For image processing
@@ -14,6 +15,7 @@ from torch.utils.data import Dataset, DataLoader    # For handling datasets and 
 import torchvision                                  # Useful for image grids
 
 # %% Experiment settings
+data_root = "data"
 image_size = 64
 batch_size = 8
 num_epochs = 10
@@ -22,7 +24,7 @@ lambda_l1 = 100.0           # L1 weight (pix2pix-style colorization)
 lr = 2e-4                   # Learning rate
 beta1 = 0.5                 # Adam beta1
 device = "cuda:0"           # Device to use for training
-data_root = "./data"
+data_root = r"data"
 
 # %% Lab Conversion Helpers
 def rgb_to_lab_transform(pil_img):
@@ -33,7 +35,7 @@ def rgb_to_lab_transform(pil_img):
         L_tensor:  [1, H, W], values roughly in [-1, 1]
         ab_tensor: [2, H, W], values roughly in [-1, 1]
     """
-    # Force RGB so grayscale or RGBA images do not break the pipeline.
+    # Handle grayscale or RGBA images
     pil_img = pil_img.convert("RGB")
 
     # Convert PIL image to NumPy array in [0, 1].
@@ -161,7 +163,7 @@ val_transform = torchvision.transforms.Compose([
 ])
 
 
-# Base datasets (easy to swap for a different dataset later if needed)
+# Base datasets
 cifar_train_base = torchvision.datasets.CIFAR10(
     root=data_root,
     train=True,
