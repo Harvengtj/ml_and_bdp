@@ -747,3 +747,118 @@ print("Saved generator and discriminator.")
 G_loaded = UNetGenerator(input_channels=1, output_channels=3).to(device)
 G_loaded.load_state_dict(torch.load(os.path.join(checkpoint_dir, "generator.pth"), map_location=device))
 G_loaded.eval()
+
+
+# %% [markdown]
+# ## Colorize Real Images
+def colorize_image_file(
+    generator,
+    input_path,
+    output_dir="./colorized_outputs",
+    inference_size=256,
+    device=device,
+    use_original_lightness=True,
+):
+    """
+    Colorize one RGB image file with the trained generator.
+
+    The model was trained on image_size, but this U-Net is fully convolutional,
+    so 64, 128, and 256 inputs can be tried at inference time.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    pil_img = Image.open(input_path).convert("RGB")
+    original_size = pil_img.size
+    pil_resized = pil_img.resize((inference_size, inference_size), Image.BICUBIC)
+
+    L_tensor, _ = rgb_to_lab_transform(pil_resized)
+    L_batch = L_tensor.unsqueeze(0).to(device)
+
+    generator.eval()
+    with torch.no_grad():
+        fake_lab = generator(L_batch)
+
+    if use_original_lightness:
+        fake_lab = torch.cat([L_batch, fake_lab[:, 1:3, :, :]], dim=1)
+
+    rgb_out = lab_tensors_to_rgb(L_batch, fake_lab)[0]
+    rgb_out = np.clip(rgb_out, 0.0, 1.0)
+
+    out_img = Image.fromarray((rgb_out * 255).astype(np.uint8))
+    out_img = out_img.resize(original_size, Image.BICUBIC)
+
+    output_path = os.path.join(
+        output_dir,
+        f"{os.path.splitext(os.path.basename(input_path))[0]}_colorized.png",
+    )
+    out_img.save(output_path)
+
+    L_display = ((L_tensor.squeeze(0).numpy() + 1.0) * 0.5).clip(0.0, 1.0)
+
+    return pil_img, L_display, out_img, output_path
+
+
+def colorize_and_show_examples(
+    generator,
+    image_paths,
+    output_dir="./colorized_outputs",
+    inference_size=256,
+    max_images=4,
+):
+    image_paths = image_paths[:max_images]
+    if len(image_paths) == 0:
+        print("No input images found.")
+        return []
+
+    results = []
+    fig, axes = plt.subplots(len(image_paths), 3, figsize=(12, 4 * len(image_paths)))
+    if len(image_paths) == 1:
+        axes = np.expand_dims(axes, axis=0)
+
+    for row, image_path in enumerate(image_paths):
+        original, model_input, colorized, output_path = colorize_image_file(
+            generator=generator,
+            input_path=image_path,
+            output_dir=output_dir,
+            inference_size=inference_size,
+            device=device,
+        )
+        results.append(output_path)
+
+        axes[row, 0].imshow(original)
+        axes[row, 0].set_title("Original RGB")
+        axes[row, 0].axis("off")
+
+        axes[row, 1].imshow(model_input, cmap="gray", vmin=0.0, vmax=1.0)
+        axes[row, 1].set_title(f"Model input L ({inference_size}x{inference_size})")
+        axes[row, 1].axis("off")
+
+        axes[row, 2].imshow(colorized)
+        axes[row, 2].set_title("Colorized")
+        axes[row, 2].axis("off")
+
+    plt.tight_layout()
+    plt.show()
+
+    print(f"Inference size: {inference_size}x{inference_size}")
+    print("Saved colorized images:")
+    for output_path in results:
+        print(output_path)
+
+    return results
+
+
+imgs_dir = os.path.join("..", "imgs")
+test_image_paths = sorted(
+    glob.glob(os.path.join(imgs_dir, "*.jpg"))
+    + glob.glob(os.path.join(imgs_dir, "*.jpeg"))
+    + glob.glob(os.path.join(imgs_dir, "*.png"))
+)[:4]
+
+colorized_paths = colorize_and_show_examples(
+    generator=G_loaded,
+    image_paths=test_image_paths,
+    output_dir="./colorized_outputs_cifar",
+    inference_size=256,
+    max_images=4,
+)
