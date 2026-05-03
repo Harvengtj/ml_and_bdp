@@ -29,6 +29,7 @@ device = "cuda:0"           # Device to use for training
 seed = 42
 num_workers = 0
 pin_memory = str(device).startswith("cuda")
+
 # %% [markdown]
 # ## Lab Conversion Helpers
 def rgb_to_lab_transform(pil_img):
