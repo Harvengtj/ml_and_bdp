@@ -265,53 +265,70 @@ class UNetGenerator(nn.Module):
     def __init__(self, input_channels=1, output_channels=2):
         super().__init__()
 
-        # Encoder: convolution layers reduce spatial size.
-        # This is like the encoder part of your Lab 5 autoencoder.
-        self.conv1 = nn.Conv2d(input_channels, 64, kernel_size=4, stride=2, padding=1)   # 32 -> 16
-        self.conv2 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1)              # 16 -> 8
-        self.conv3 = nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1)             # 8 -> 4
-        self.conv4 = nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=1)             # 4 -> 2
+        # Encoder: this follows the CIFAR U-Net pipeline from the paper/repo.
+        # The first layer keeps 32x32 resolution; later layers downsample.
+        self.conv0 = nn.Conv2d(input_channels, 64, kernel_size=4, stride=1, padding="same")  # 32 -> 32
+        self.conv1 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1)                  # 32 -> 16
+        self.conv2 = nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1)                 # 16 -> 8
+        self.conv3 = nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=1)                 # 8 -> 4
+        self.conv4 = nn.Conv2d(512, 512, kernel_size=4, stride=2, padding=1)                 # 4 -> 2
 
-        # Batch normalization after encoder layers except the first.
-        self.bn2 = nn.BatchNorm2d(128)
-        self.bn3 = nn.BatchNorm2d(256)
+        # Batch normalization after encoder layers.
+        # The paper omits batch normalization on the first generator layer.
+        self.bn1 = nn.BatchNorm2d(128)
+        self.bn2 = nn.BatchNorm2d(256)
+        self.bn3 = nn.BatchNorm2d(512)
         self.bn4 = nn.BatchNorm2d(512)
 
-        # Decoder: transposed convolution layers increase spatial size.
-        # Skip connections will be concatenated in forward().
-        self.deconv1 = nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1)  # 2 -> 4
-        self.deconv2 = nn.ConvTranspose2d(512, 128, kernel_size=4, stride=2, padding=1)  # 4 -> 8
-        self.deconv3 = nn.ConvTranspose2d(256, 64, kernel_size=4, stride=2, padding=1)   # 8 -> 16
-        self.deconv4 = nn.ConvTranspose2d(128, output_channels, kernel_size=4, stride=2, padding=1)  # 16 -> 32
+        # Decoder: mirrored transposed-convolution layers.
+        # Each decoder block upsamples, concatenates the matching encoder feature,
+        # then applies batch normalization and ReLU.
+        self.deconv0 = nn.ConvTranspose2d(512, 512, kernel_size=4, stride=2, padding=1)  # 2 -> 4
+        self.deconv1 = nn.ConvTranspose2d(1024, 256, kernel_size=4, stride=2, padding=1) # 4 -> 8
+        self.deconv2 = nn.ConvTranspose2d(512, 128, kernel_size=4, stride=2, padding=1)  # 8 -> 16
+        self.deconv3 = nn.ConvTranspose2d(256, 64, kernel_size=4, stride=2, padding=1)   # 16 -> 32
 
-        # Batch normalization in the decoder.
-        self.dbn1 = nn.BatchNorm2d(256)
-        self.dbn2 = nn.BatchNorm2d(128)
-        self.dbn3 = nn.BatchNorm2d(64)
+        # Batch normalization in the decoder after skip concatenation.
+        self.dbn0 = nn.BatchNorm2d(1024)
+        self.dbn1 = nn.BatchNorm2d(512)
+        self.dbn2 = nn.BatchNorm2d(256)
+        self.dbn3 = nn.BatchNorm2d(128)
+
+        # Paper/repo final layer: 1x1 convolution plus tanh.
+        self.final_conv = nn.Conv2d(128, output_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x):
         # Encoder.
         # LeakyReLU is used in the contracting path, as in pix2pix-style GANs.
-        e1 = F.leaky_relu(self.conv1(x), negative_slope=0.2)              # [B, 64, 16, 16]
-        e2 = F.leaky_relu(self.bn2(self.conv2(e1)), negative_slope=0.2)   # [B, 128, 8, 8]
-        e3 = F.leaky_relu(self.bn3(self.conv3(e2)), negative_slope=0.2)   # [B, 256, 4, 4]
+        e0 = F.leaky_relu(self.conv0(x), negative_slope=0.2)              # [B, 64, 32, 32]
+        e1 = F.leaky_relu(self.bn1(self.conv1(e0)), negative_slope=0.2)   # [B, 128, 16, 16]
+        e2 = F.leaky_relu(self.bn2(self.conv2(e1)), negative_slope=0.2)   # [B, 256, 8, 8]
+        e3 = F.leaky_relu(self.bn3(self.conv3(e2)), negative_slope=0.2)   # [B, 512, 4, 4]
         e4 = F.leaky_relu(self.bn4(self.conv4(e3)), negative_slope=0.2)   # [B, 512, 2, 2]
 
         # Decoder.
-        # ReLU is used in the expanding path.
-        d1 = F.relu(self.dbn1(self.deconv1(e4)))                          # [B, 256, 4, 4]
+        # The paper order is transposed convolution, skip concatenation,
+        # batch normalization, then ReLU.
+        d0 = self.deconv0(e4)                                              # [B, 512, 4, 4]
+        d0 = torch.cat([d0, e3], dim=1)                                    # [B, 1024, 4, 4]
+        d0 = F.relu(self.dbn0(d0))
+        d0 = F.dropout(d0, p=0.5, training=self.training)
+
+        d1 = self.deconv1(d0)                                              # [B, 256, 8, 8]
+        d1 = torch.cat([d1, e2], dim=1)                                    # [B, 512, 8, 8]
+        d1 = F.relu(self.dbn1(d1))
         d1 = F.dropout(d1, p=0.5, training=self.training)
-        d1 = torch.cat([d1, e3], dim=1)                                    # [B, 512, 4, 4]
 
-        d2 = F.relu(self.dbn2(self.deconv2(d1)))                           # [B, 128, 8, 8]
-        d2 = F.dropout(d2, p=0.5, training=self.training)
-        d2 = torch.cat([d2, e2], dim=1)                                    # [B, 256, 8, 8]
+        d2 = self.deconv2(d1)                                              # [B, 128, 16, 16]
+        d2 = torch.cat([d2, e1], dim=1)                                    # [B, 256, 16, 16]
+        d2 = F.relu(self.dbn2(d2))
 
-        d3 = F.relu(self.dbn3(self.deconv3(d2)))                           # [B, 64, 16, 16]
-        d3 = torch.cat([d3, e1], dim=1)                                    # [B, 128, 16, 16]
+        d3 = self.deconv3(d2)                                              # [B, 64, 32, 32]
+        d3 = torch.cat([d3, e0], dim=1)                                    # [B, 128, 32, 32]
+        d3 = F.relu(self.dbn3(d3))
 
-        # Final layer predicts normalized ab values in [-1, 1].
-        out = torch.tanh(self.deconv4(d3))                                 # [B, 2, 32, 32]
+        # Final 1x1 convolution predicts normalized ab values in [-1, 1].
+        out = torch.tanh(self.final_conv(d3))                              # [B, 2, 32, 32]
         return out
 
 G = UNetGenerator(input_channels=1, output_channels=2).to(device)
@@ -322,30 +339,31 @@ with torch.no_grad():
 
 print(fake_ab.shape)
 
-# %% Build the Patch Discriminator
-class PatchDiscriminator(nn.Module):
+
+# %% Build the Conditional Discriminator
+class ConditionalDiscriminator(nn.Module):
     """
-    PatchGAN discriminator written in the same explicit style as the labs.
+    Conditional convolutional discriminator written in the same explicit style as the labs.
 
     Input:
         concat(L, ab) with shape [B, 3, H, W]
 
     Output:
-        patch logits [B, 1, h, w]
+        raw real/fake logits [B, 1, 1, 1]
     """
     def __init__(self, input_channels=3):
         super().__init__()
 
         # The discriminator is a CNN classifier, like Lab 5 ConvNet,
-        # but it is fully convolutional and outputs a grid of logits.
+        # but it is fully convolutional and conditioned on L.
         self.conv1 = nn.Conv2d(input_channels, 64, kernel_size=4, stride=2, padding=1)
         self.conv2 = nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1)
         self.conv3 = nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1)
-        self.conv4 = nn.Conv2d(256, 512, kernel_size=4, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(256, 512, kernel_size=4, stride=1, padding="same")
 
-        # Final layer outputs raw patch logits.
+        # Final layer maps the remaining 4x4 feature map to one raw logit.
         # No sigmoid here because BCEWithLogitsLoss expects raw logits.
-        self.conv5 = nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=1)
+        self.conv5 = nn.Conv2d(512, 1, kernel_size=4, stride=1, padding=0)
 
         # Batch normalization except after the first layer.
         self.bn2 = nn.BatchNorm2d(128)
@@ -358,11 +376,11 @@ class PatchDiscriminator(nn.Module):
         x = F.leaky_relu(self.bn3(self.conv3(x)), negative_slope=0.2)
         x = F.leaky_relu(self.bn4(self.conv4(x)), negative_slope=0.2)
 
-        # Raw real/fake patch logits.
+        # Raw real/fake logits.
         x = self.conv5(x)
         return x
-    
-D = PatchDiscriminator(input_channels=3).to(device)
+
+D = ConditionalDiscriminator(input_channels=3).to(device)
 
 L_batch, ab_batch = next(iter(trainloader))
 pair = torch.cat([L_batch, ab_batch], dim=1).to(device)
@@ -372,6 +390,7 @@ with torch.no_grad():
 
 print(pair.shape)
 print(logits.shape)
+
 
 # %% Add Helpers
 def count_parameters(model):
@@ -502,13 +521,15 @@ for epoch in range(warmup_epochs):
     print(f"Warm-up epoch {epoch + 1}/{warmup_epochs} | L1 loss: {train_loss:.4f}")
     visualize_predictions(G, valloader, device, max_images=4, title=f"Warm-up epoch {epoch + 1}")
 
+
 # %% Create Discriminator, Losses, Optimizers
-D = PatchDiscriminator(input_channels=3).to(device)
+# Create discriminator.
+D = ConditionalDiscriminator(input_channels=3).to(device)
 
 print(f"Discriminator parameters: {count_parameters(D):,}")
 
 # BCEWithLogitsLoss expects raw logits.
-# Therefore PatchDiscriminator does not end with sigmoid.
+# Therefore ConditionalDiscriminator does not end with sigmoid.
 criterion_gan = nn.BCEWithLogitsLoss()
 
 # L1 criterion was already defined, but define again for clarity.
@@ -517,6 +538,7 @@ criterion_l1 = nn.L1Loss()
 # Optimizers.
 optimizer_G = optim.Adam(G.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizer_D = optim.Adam(D.parameters(), lr=lr, betas=(beta1, 0.999))
+
 
 L_batch, ab_batch = next(iter(trainloader))
 L_batch = L_batch.to(device)
@@ -531,6 +553,7 @@ with torch.no_grad():
 
 print(real_logits.shape)
 print(fake_logits.shape)
+
 
 # %% Write One GAN Epoch
 def train_gan_one_epoch(
@@ -641,3 +664,84 @@ def train_gan_one_epoch(
         "G_l1": running_G_l1 / n,
     }
 
+# %% Full Training Loop
+history = {
+    "D": [],
+    "G": [],
+    "G_gan": [],
+    "G_l1": [],
+}
+
+for epoch in range(num_epochs):
+    losses = train_gan_one_epoch(
+        generator=G,
+        discriminator=D,
+        dataloader=trainloader,
+        optimizer_G=optimizer_G,
+        optimizer_D=optimizer_D,
+        criterion_gan=criterion_gan,
+        criterion_l1=criterion_l1,
+        lambda_l1=lambda_l1,
+        device=device,
+        real_label_value=0.9,
+    )
+
+    for key in history:
+        history[key].append(losses[key])
+
+    print(
+        f"Epoch {epoch + 1}/{num_epochs} | "
+        f"D: {losses['D']:.4f} | "
+        f"G: {losses['G']:.4f} | "
+        f"G_gan: {losses['G_gan']:.4f} | "
+        f"G_l1: {losses['G_l1']:.4f}"
+    )
+
+    visualize_predictions(
+        generator=G,
+        dataloader=valloader,
+        device=device,
+        max_images=4,
+        title=f"GAN epoch {epoch + 1}",
+    )
+
+# %% Plot GAN Losses
+def plot_gan_history(history):
+    epochs = np.arange(1, len(history["D"]) + 1)
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    axes[0].plot(epochs, history["D"], label="D loss")
+    axes[0].plot(epochs, history["G"], label="G total loss")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Loss")
+    axes[0].set_title("GAN losses")
+    axes[0].legend()
+
+    axes[1].plot(epochs, history["G_gan"], label="G adversarial")
+    axes[1].plot(epochs, history["G_l1"], label="G L1")
+    axes[1].set_xlabel("Epoch")
+    axes[1].set_ylabel("Loss")
+    axes[1].set_title("Generator loss components")
+    axes[1].legend()
+
+    plt.tight_layout()
+    plt.show()
+
+
+plot_gan_history(history)
+
+
+# %% Save Checkpoints
+checkpoint_dir = "./checkpoints_colorization"
+os.makedirs(checkpoint_dir, exist_ok=True)
+
+torch.save(G.state_dict(), os.path.join(checkpoint_dir, "generator.pth"))
+torch.save(D.state_dict(), os.path.join(checkpoint_dir, "discriminator.pth"))
+
+print("Saved generator and discriminator.")
+
+# %% Load Checkpoints
+G_loaded = UNetGenerator(input_channels=1, output_channels=2).to(device)
+G_loaded.load_state_dict(torch.load(os.path.join(checkpoint_dir, "generator.pth"), map_location=device))
+G_loaded.eval()
