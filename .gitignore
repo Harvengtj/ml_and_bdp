@@ -15,7 +15,6 @@ weights/
 outputs/
 results/
 logs/
-*.pth
 *.pt
 *.h5
 *.pkl

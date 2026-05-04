@@ -26,7 +26,6 @@ lambda_l1 = 100.0           # L1 weight (pix2pix-style colorization)
 lr = 2e-4                   # Learning rate
 beta1 = 0.5                 # Adam beta1
 device = "cuda:0"           # Device to use for training
-seed = 42
 num_workers = 0
 pin_memory = str(device).startswith("cuda")
 
@@ -143,7 +142,7 @@ class LabColorizationDataset(Dataset):
         return len(self.base_dataset)
 
     def __getitem__(self, index):
-        # The base CIFAR-10 dataset returns ((L, ab), label) because of the transform.
+        # The base dataset returns ((L, lab), label) because of the transform.
         # Discard the label, we only need the images for colorization.
         (L, lab), _ = self.base_dataset[index]
         return L, lab
@@ -190,7 +189,7 @@ trainloader = DataLoader(
     trainset,
     batch_size=batch_size,
     shuffle=True,
-    num_workers=num_workers,  # TODO Not use in the lab, I will have to check the usefullness of this
+    num_workers=num_workers,
     pin_memory=pin_memory,
 )
 
@@ -204,6 +203,7 @@ valloader = DataLoader(
 
 print(f"Training images: {len(trainset)}")
 print(f"Validation images: {len(valset)}")
+print(f"DataLoader workers: {num_workers}")
 print(f"Device: {device}")
 
 L_batch, lab_batch = next(iter(trainloader))
