@@ -755,7 +755,7 @@ def colorize_image_file(
     generator,
     input_path,
     output_dir="./colorized_outputs",
-    inference_size=256,
+    inference_size=32,
     device=device,
     use_original_lightness=True,
 ):
@@ -763,7 +763,7 @@ def colorize_image_file(
     Colorize one RGB image file with the trained generator.
 
     The model was trained on image_size, but this U-Net is fully convolutional,
-    so 64, 128, and 256 inputs can be tried at inference time.
+    so other sizes can be tried, but 32 matches this CIFAR training run.
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -802,7 +802,7 @@ def colorize_and_show_examples(
     generator,
     image_paths,
     output_dir="./colorized_outputs",
-    inference_size=256,
+    inference_size=32,
     max_images=4,
 ):
     image_paths = image_paths[:max_images]
@@ -859,6 +859,6 @@ colorized_paths = colorize_and_show_examples(
     generator=G_loaded,
     image_paths=test_image_paths,
     output_dir="./colorized_outputs_cifar",
-    inference_size=256,
+    inference_size=32,
     max_images=4,
 )
