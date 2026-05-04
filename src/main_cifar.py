@@ -748,6 +748,14 @@ G_loaded = UNetGenerator(input_channels=1, output_channels=3).to(device)
 G_loaded.load_state_dict(torch.load(os.path.join(checkpoint_dir, "generator.pth"), map_location=device))
 G_loaded.eval()
 
+visualize_predictions(
+    generator=G_loaded,
+    dataloader=valloader,
+    device=device,
+    max_images=4,
+    title="Loaded checkpoint on CIFAR validation images",
+)
+
 
 # %% [markdown]
 # ## Colorize Real Images
@@ -855,10 +863,11 @@ test_image_paths = sorted(
     + glob.glob(os.path.join(imgs_dir, "*.png"))
 )[:4]
 
-colorized_paths = colorize_and_show_examples(
-    generator=G_loaded,
-    image_paths=test_image_paths,
-    output_dir="./colorized_outputs_cifar",
-    inference_size=32,
-    max_images=4,
-)
+# Uncomment this block when you want to test external images from ../imgs.
+# colorized_paths = colorize_and_show_examples(
+#     generator=G_loaded,
+#     image_paths=test_image_paths,
+#     output_dir="./colorized_outputs_cifar",
+#     inference_size=32,
+#     max_images=4,
+# )
