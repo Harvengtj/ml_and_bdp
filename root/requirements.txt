@@ -1,0 +1,22 @@
+# deep learning
+torch
+torchvision
+torchmetrics
+
+# metrics
+lpips
+
+# data analysis
+numpy
+pandas
+
+# image processing
+Pillow
+matplotlib
+scikit-image
+seaborn
+
+# utilities
+requests
+tqdm
+datasets
